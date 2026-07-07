@@ -1,0 +1,1910 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "道路交通事故风险预估与后果预测系统 API",
+    "description": "交通事故上报、风险评估、调度任务、用户管理等全部后端接口",
+    "version": "1.0.0",
+    "contact": {
+      "name": "开发团队"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "本地开发环境"
+    }
+  ],
+  "paths": {
+    "---------------------------------------------------认证---------------------------------------------------": {},
+    "/api/v1/auth/register": {
+      "post": {
+        "summary": "注册新用户",
+        "description": "创建新用户账号（普通用户只能注册 FIELD_OFFICER / COMMAND_CENTER / RESCUE_WORKER，不能注册 ADMIN）",
+        "tags": ["认证"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "注册成功，返回 token 和用户信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "用户名已存在 或 参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "用户登录",
+        "description": "用户名密码登录，返回 JWT token 和用户信息",
+        "tags": ["认证"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "用户名或密码错误 / 账号已禁用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "summary": "获取当前用户信息",
+        "description": "通过 Bearer token 获取当前登录用户的信息",
+        "tags": ["认证"],
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "description": "Bearer JWT token",
+            "schema": {
+              "type": "string",
+              "example": "Bearer eyJhbGciOiJIUzI1NiJ9..."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "token 缺失 / 无效 / 已过期",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "---------------------------------------------------健康检查---------------------------------------------------": {},
+    "/api/health": {
+      "get": {
+        "summary": "健康检查（兼容旧版）",
+        "description": "返回 HealthResponse，含状态、时间和各依赖状态",
+        "tags": ["健康检查"],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "summary": "健康检查（新版）",
+        "description": "与 /api/health 相同，返回 HealthResponse",
+        "tags": ["健康检查"],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "---------------------------------------------------事故上报---------------------------------------------------": {},
+    "/api/v1/incidents": {
+      "get": {
+        "summary": "分页查询事故列表",
+        "description": "支持按状态、风险等级、关键词过滤，分页查询",
+        "tags": ["事故上报"],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "按事故状态过滤",
+            "schema": {
+              "$ref": "#/components/schemas/IncidentStatus"
+            }
+          },
+          {
+            "name": "riskLevel",
+            "in": "query",
+            "required": false,
+            "description": "按风险等级过滤",
+            "schema": {
+              "$ref": "#/components/schemas/RiskLevel"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "description": "关键词搜索（匹配位置、道路名等）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "页码（从0开始）",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "description": "每页条数",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "description": "排序字段，例: createdAt,desc",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Incident"
+                      }
+                    },
+                    "totalElements": {
+                      "type": "integer",
+                      "description": "总记录数"
+                    },
+                    "totalPages": {
+                      "type": "integer",
+                      "description": "总页数"
+                    },
+                    "number": {
+                      "type": "integer",
+                      "description": "当前页码"
+                    },
+                    "size": {
+                      "type": "integer",
+                      "description": "每页大小"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建事故报告",
+        "description": "提交交通事故信息，必填字段：locationName、description",
+        "tags": ["事故上报"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIncidentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Incident"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/incidents/{incidentId}": {
+      "get": {
+        "summary": "获取事故详情",
+        "description": "返回事故基本信息、附件列表、预测结果、调度任务",
+        "tags": ["事故上报"],
+        "parameters": [
+          {
+            "name": "incidentId",
+            "in": "path",
+            "required": true,
+            "description": "事故ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentDetailResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/incidents/{incidentId}/attachments": {
+      "post": {
+        "summary": "上传事故图片",
+        "description": "上传事故现场图片，multipart/form-data 格式",
+        "tags": ["事故上报"],
+        "parameters": [
+          {
+            "name": "incidentId",
+            "in": "path",
+            "required": true,
+            "description": "事故ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "uploadedBy",
+            "in": "query",
+            "required": false,
+            "description": "上传人用户ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "图片文件"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "上传成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentAttachment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/incidents/consequence-predictions": {
+      "post": {
+        "summary": "运行事故后果预测",
+        "description": "预测事故类型、风险等级、拥堵时间、恢复时间",
+        "tags": ["事故上报"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PredictionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "预测完成",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PredictionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "---------------------------------------------------调度任务---------------------------------------------------": {},
+    "/api/v1/dispatch-tasks": {
+      "get": {
+        "summary": "分页查询调度任务",
+        "description": "分页查询所有调度任务",
+        "tags": ["调度任务"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DispatchTask"
+                      }
+                    },
+                    "totalElements": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    },
+                    "number": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建调度任务",
+        "description": "创建警力/清障/救援/医疗调度任务，必填：incidentId、taskType",
+        "tags": ["调度任务"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDispatchTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchTask"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dispatch-tasks/my": {
+      "get": {
+        "summary": "查询我的调度任务",
+        "description": "根据接收人用户ID查询任务。优先使用 receiverUserId 查询参数，回退到 X-User-Id 请求头",
+        "tags": ["调度任务"],
+        "parameters": [
+          {
+            "name": "X-User-Id",
+            "in": "header",
+            "required": false,
+            "description": "用户ID（请求头方式）",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "receiverUserId",
+            "in": "query",
+            "required": false,
+            "description": "用户ID（查询参数方式，优先级高于请求头）",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功（返回列表，不分页）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DispatchTask"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dispatch-tasks/{taskId}/status": {
+      "put": {
+        "summary": "更新调度任务状态",
+        "description": "更新任务状态（DISPATCHED→DEPARTED→ARRIVED→PROCESSING→COMPLETED/CANCELLED）并填写反馈",
+        "tags": ["调度任务"],
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "description": "调度任务ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaskStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchTask"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "---------------------------------------------------系统管理---------------------------------------------------": {},
+    "/api/v1/admin/users": {
+      "get": {
+        "summary": "分页查询用户列表",
+        "description": "查询所有用户，返回分页结果",
+        "tags": ["系统管理"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserResponse"
+                      }
+                    },
+                    "totalElements": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    },
+                    "number": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建用户",
+        "description": "创建新用户，必填：fullName、username、role、password",
+        "tags": ["系统管理"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{id}": {
+      "put": {
+        "summary": "修改用户信息",
+        "description": "修改用户信息（所有字段可选，只传需要修改的字段）",
+        "tags": ["系统管理"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "用户ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除用户",
+        "description": "删除指定用户",
+        "tags": ["系统管理"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "用户ID",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "删除成功（无返回内容）"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/operation-logs": {
+      "get": {
+        "summary": "分页查询操作日志",
+        "description": "查询操作审计日志",
+        "tags": ["系统管理"],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "分页结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/OperationLog"
+                      }
+                    },
+                    "totalElements": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    },
+                    "number": {
+                      "type": "integer"
+                    },
+                    "size": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "---------------------------------------------------实时推送---------------------------------------------------": {},
+    "/api/v1/realtime/road-risk/stream": {
+      "get": {
+        "summary": "SSE 实时事件流",
+        "description": "订阅事故上报、预测完成、任务创建、任务状态变化等实时事件",
+        "tags": ["实时推送"],
+        "responses": {
+          "200": {
+            "description": "SSE 事件流，持续推送 RealtimeEvent",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeEvent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "---------------------------------------------------示例 CRUD---------------------------------------------------": {},
+    "/api/items": {
+      "get": {
+        "summary": "获取所有 Item（示例 CRUD）",
+        "description": "脚手架资源，用于示例 CRUD 操作",
+        "tags": ["示例"],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建 Item",
+        "description": "创建示例项目，name 为必填",
+        "tags": ["示例"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Item"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{id}": {
+      "get": {
+        "summary": "获取单个 Item",
+        "description": "根据 ID 获取示例项目",
+        "tags": ["示例"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到"
+          }
+        }
+      },
+      "put": {
+        "summary": "更新 Item",
+        "description": "更新示例项目",
+        "tags": ["示例"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Item"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除 Item",
+        "description": "删除示例项目",
+        "tags": ["示例"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "删除成功（无返回内容）"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "description": "健康检查响应",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "UP"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-07-07 12:00:00"
+          },
+          "dependencies": {
+            "type": "object",
+            "description": "各依赖服务状态",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "database": "H2/JPA",
+              "predictionClient": "fallback-rule-v1",
+              "deepSeekClient": "placeholder",
+              "mapProvider": "baidu-placeholder"
+            }
+          }
+        }
+      },
+      "IncidentStatus": {
+        "type": "string",
+        "description": "事故状态",
+        "enum": ["REPORTED", "PREDICTED", "DISPATCHED", "PROCESSING", "CLEARED", "CLOSED"]
+      },
+      "RiskLevel": {
+        "type": "string",
+        "description": "风险等级",
+        "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+      },
+      "TaskType": {
+        "type": "string",
+        "description": "调度任务类型",
+        "enum": ["POLICE", "CLEARANCE", "RESCUE", "MEDICAL"]
+      },
+      "TaskStatus": {
+        "type": "string",
+        "description": "调度任务状态",
+        "enum": ["DISPATCHED", "DEPARTED", "ARRIVED", "PROCESSING", "COMPLETED", "CANCELLED"]
+      },
+      "UserRole": {
+        "type": "string",
+        "description": "用户角色",
+        "enum": ["FIELD_OFFICER", "COMMAND_CENTER", "RESCUE_WORKER", "ADMIN"]
+      },
+      "UserStatus": {
+        "type": "string",
+        "description": "用户状态",
+        "enum": ["ENABLED", "DISABLED"]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "登录请求",
+        "required": ["username", "password"],
+        "properties": {
+          "username": {
+            "type": "string",
+            "description": "用户名（必填，不能为空）",
+            "example": "police1"
+          },
+          "password": {
+            "type": "string",
+            "description": "密码（必填，不能为空）",
+            "example": "123456"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "description": "登录/注册成功响应",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "JWT token",
+            "example": "eyJhbGciOiJIUzI1NiJ9..."
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "token 类型",
+            "example": "Bearer"
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "format": "int64",
+            "description": "token 过期时间（秒）",
+            "example": 86400
+          },
+          "user": {
+            "$ref": "#/components/schemas/CurrentUserResponse",
+            "description": "用户信息"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "description": "注册请求",
+        "required": ["fullName", "username", "password"],
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "description": "真实姓名（必填，最长64字符）",
+            "example": "张三"
+          },
+          "username": {
+            "type": "string",
+            "description": "用户名（必填，3-64字符）",
+            "example": "zhangsan"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号（可选）",
+            "example": "13800138000"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "邮箱（可选）",
+            "example": "zhangsan@example.com"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "description": "用户角色（可选，默认 FIELD_OFFICER）"
+          },
+          "password": {
+            "type": "string",
+            "description": "密码（必填，最少6字符）",
+            "example": "123456"
+          }
+        }
+      },
+      "CurrentUserResponse": {
+        "type": "object",
+        "description": "当前用户信息响应",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "用户ID"
+          },
+          "fullName": {
+            "type": "string",
+            "description": "真实姓名"
+          },
+          "username": {
+            "type": "string",
+            "description": "用户名"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号"
+          },
+          "email": {
+            "type": "string",
+            "description": "邮箱"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "description": "用户角色"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus",
+            "description": "用户状态"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "全局异常响应",
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "异常时间",
+            "example": "2026-07-07T15:28:11.461"
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP 状态码",
+            "example": 401
+          },
+          "error": {
+            "type": "string",
+            "description": "状态描述",
+            "example": "Unauthorized"
+          },
+          "message": {
+            "type": "string",
+            "description": "详细错误信息",
+            "example": "Invalid username or password"
+          },
+          "path": {
+            "type": "string",
+            "description": "请求路径",
+            "example": "/api/v1/auth/login"
+          }
+        }
+      },
+      "CreateIncidentRequest": {
+        "type": "object",
+        "description": "创建事故请求",
+        "required": ["locationName", "description"],
+        "properties": {
+          "locationName": {
+            "type": "string",
+            "description": "位置名称（必填）",
+            "example": "G4京港澳高速K123"
+          },
+          "address": {
+            "type": "string",
+            "description": "详细地址",
+            "example": "北行方向出口12附近"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "description": "经度",
+            "example": 113.2644
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "description": "纬度",
+            "example": 23.1291
+          },
+          "roadName": {
+            "type": "string",
+            "description": "道路名称",
+            "example": "G4京港澳高速"
+          },
+          "initialAccidentType": {
+            "type": "string",
+            "description": "初步事故类型",
+            "example": "追尾"
+          },
+          "description": {
+            "type": "string",
+            "description": "事故描述（必填）",
+            "example": "两车追尾，占用两条车道，无明火"
+          },
+          "occupiedLanes": {
+            "type": "integer",
+            "description": "占用车道数",
+            "example": 2
+          },
+          "trafficFlow": {
+            "type": "integer",
+            "description": "车流量（辆/小时）",
+            "example": 1800
+          },
+          "weather": {
+            "type": "string",
+            "description": "天气",
+            "example": "rain"
+          },
+          "roadLevel": {
+            "type": "string",
+            "description": "道路等级",
+            "example": "expressway"
+          },
+          "reportUserId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "上报人用户ID",
+            "example": 1
+          }
+        }
+      },
+      "Incident": {
+        "type": "object",
+        "description": "事故事件",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "主键ID"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "创建时间"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "更新时间"
+          },
+          "incidentNo": {
+            "type": "string",
+            "description": "事故编号（唯一）",
+            "example": "INC202607070001"
+          },
+          "locationName": {
+            "type": "string",
+            "description": "位置名称",
+            "maxLength": 160
+          },
+          "address": {
+            "type": "string"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "roadName": {
+            "type": "string"
+          },
+          "initialAccidentType": {
+            "type": "string",
+            "description": "初步事故类型"
+          },
+          "confirmedAccidentType": {
+            "type": "string",
+            "description": "确认事故类型"
+          },
+          "description": {
+            "type": "string",
+            "description": "事故描述",
+            "maxLength": 1000
+          },
+          "occupiedLanes": {
+            "type": "integer"
+          },
+          "trafficFlow": {
+            "type": "integer"
+          },
+          "weather": {
+            "type": "string"
+          },
+          "roadLevel": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/IncidentStatus"
+          },
+          "riskLevel": {
+            "$ref": "#/components/schemas/RiskLevel"
+          },
+          "predictedCongestionMinutes": {
+            "type": "integer",
+            "description": "预计拥堵时长（分钟）"
+          },
+          "predictedRecoveryMinutes": {
+            "type": "integer",
+            "description": "预计恢复时长（分钟）"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "description": "置信度"
+          },
+          "suggestion": {
+            "type": "string",
+            "description": "处置建议",
+            "maxLength": 1000
+          },
+          "explanation": {
+            "type": "string",
+            "description": "预测解释",
+            "maxLength": 1500
+          },
+          "reportUserId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "上报人用户ID"
+          }
+        }
+      },
+      "PredictionRequest": {
+        "type": "object",
+        "description": "预测请求",
+        "properties": {
+          "incidentId": {
+            "type": "integer",
+            "format": "int64",
+            "example": 1
+          },
+          "locationName": {
+            "type": "string"
+          },
+          "roadName": {
+            "type": "string"
+          },
+          "accidentType": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "occupiedLanes": {
+            "type": "integer"
+          },
+          "trafficFlow": {
+            "type": "integer"
+          },
+          "weather": {
+            "type": "string"
+          },
+          "roadLevel": {
+            "type": "string"
+          }
+        }
+      },
+      "PredictionResult": {
+        "type": "object",
+        "description": "预测结果",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "incidentId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "accidentType": {
+            "type": "string",
+            "description": "识别的事故类型",
+            "maxLength": 80
+          },
+          "riskLevel": {
+            "$ref": "#/components/schemas/RiskLevel"
+          },
+          "congestionDurationMinutes": {
+            "type": "integer",
+            "description": "预计拥堵时间（分钟）"
+          },
+          "recoveryDurationMinutes": {
+            "type": "integer",
+            "description": "预计恢复时间（分钟）"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double",
+            "description": "置信度"
+          },
+          "modelVersion": {
+            "type": "string",
+            "description": "模型版本"
+          },
+          "suggestions": {
+            "type": "string",
+            "description": "处置措施建议",
+            "maxLength": 1000
+          },
+          "explanation": {
+            "type": "string",
+            "description": "预测解释说明",
+            "maxLength": 1500
+          }
+        }
+      },
+      "IncidentAttachment": {
+        "type": "object",
+        "description": "事故附件（图片）",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "incidentId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "存储文件名"
+          },
+          "originalFilename": {
+            "type": "string",
+            "description": "原始文件名"
+          },
+          "contentType": {
+            "type": "string",
+            "description": "文件类型",
+            "maxLength": 80
+          },
+          "filePath": {
+            "type": "string",
+            "description": "存储路径",
+            "maxLength": 500
+          },
+          "fileSize": {
+            "type": "integer",
+            "format": "int64",
+            "description": "文件大小（字节）"
+          },
+          "uploadedBy": {
+            "type": "integer",
+            "format": "int64",
+            "description": "上传人"
+          },
+          "recognitionStatus": {
+            "type": "string",
+            "description": "识别状态",
+            "default": "PENDING"
+          }
+        }
+      },
+      "IncidentDetailResponse": {
+        "type": "object",
+        "description": "事故详情（聚合）",
+        "properties": {
+          "incident": {
+            "$ref": "#/components/schemas/Incident",
+            "description": "事故基本信息"
+          },
+          "attachments": {
+            "type": "array",
+            "description": "附件列表",
+            "items": {
+              "$ref": "#/components/schemas/IncidentAttachment"
+            }
+          },
+          "predictions": {
+            "type": "array",
+            "description": "预测结果列表",
+            "items": {
+              "$ref": "#/components/schemas/PredictionResult"
+            }
+          },
+          "dispatchTasks": {
+            "type": "array",
+            "description": "调度任务列表",
+            "items": {
+              "$ref": "#/components/schemas/DispatchTask"
+            }
+          }
+        }
+      },
+      "CreateDispatchTaskRequest": {
+        "type": "object",
+        "description": "创建调度任务请求",
+        "required": ["incidentId", "taskType"],
+        "properties": {
+          "incidentId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "关联事故ID（必填）"
+          },
+          "taskType": {
+            "$ref": "#/components/schemas/TaskType",
+            "description": "任务类型（必填）"
+          },
+          "receiverUserId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "接收人用户ID"
+          },
+          "assignedByUserId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "分派人用户ID"
+          },
+          "vehicleRequired": {
+            "type": "boolean",
+            "description": "是否需要车辆"
+          },
+          "vehicleType": {
+            "type": "string",
+            "description": "车辆类型",
+            "example": "tow_truck"
+          },
+          "advice": {
+            "type": "string",
+            "description": "处置建议",
+            "maxLength": 1000,
+            "example": "先拖走故障车辆，保留一条车道封闭"
+          }
+        }
+      },
+      "DispatchTask": {
+        "type": "object",
+        "description": "调度任务",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "taskNo": {
+            "type": "string",
+            "description": "任务编号（唯一）",
+            "maxLength": 40
+          },
+          "incidentId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "taskType": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "receiverUserId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "assignedByUserId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "vehicleRequired": {
+            "type": "boolean"
+          },
+          "vehicleType": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "locationName": {
+            "type": "string",
+            "description": "位置名称",
+            "maxLength": 160
+          },
+          "riskLevel": {
+            "$ref": "#/components/schemas/RiskLevel"
+          },
+          "advice": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "feedback": {
+            "type": "string",
+            "description": "处理反馈",
+            "maxLength": 1000
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "完成时间"
+          }
+        }
+      },
+      "UpdateTaskStatusRequest": {
+        "type": "object",
+        "description": "更新任务状态请求",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus",
+            "description": "任务状态（必填）"
+          },
+          "feedback": {
+            "type": "string",
+            "description": "处理反馈",
+            "example": "已到达现场，正在清理"
+          }
+        }
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "description": "创建用户请求",
+        "required": ["fullName", "username", "role", "password"],
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "description": "真实姓名（必填）",
+            "example": "张三"
+          },
+          "username": {
+            "type": "string",
+            "description": "用户名（必填，唯一）",
+            "example": "zhangsan"
+          },
+          "phone": {
+            "type": "string",
+            "description": "手机号",
+            "example": "13800138000"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "邮箱"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "description": "角色（必填）"
+          },
+          "password": {
+            "type": "string",
+            "description": "密码（必填）",
+            "example": "123456"
+          }
+        }
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "description": "修改用户请求（所有字段可选）",
+        "properties": {
+          "fullName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "description": "用户信息响应",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OperationLog": {
+        "type": "object",
+        "description": "操作日志",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operatorUserId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "操作人用户ID"
+          },
+          "operationType": {
+            "type": "string",
+            "description": "操作类型",
+            "maxLength": 80
+          },
+          "objectType": {
+            "type": "string",
+            "description": "操作对象类型",
+            "maxLength": 80
+          },
+          "objectId": {
+            "type": "string",
+            "description": "操作对象ID",
+            "maxLength": 80
+          },
+          "ipAddress": {
+            "type": "string",
+            "description": "IP地址",
+            "maxLength": 80
+          },
+          "detail": {
+            "type": "string",
+            "description": "操作详情",
+            "maxLength": 1000
+          }
+        }
+      },
+      "Item": {
+        "type": "object",
+        "description": "示例项目（脚手架）",
+        "required": ["name"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "description": "名称（必填，不能为空）"
+          },
+          "description": {
+            "type": "string",
+            "description": "描述",
+            "maxLength": 500
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RealtimeEvent": {
+        "type": "object",
+        "description": "SSE 实时事件",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "事件类型"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time",
+            "description": "事件时间"
+          },
+          "data": {
+            "type": "object",
+            "description": "事件数据"
+          }
+        }
+      }
+    },
+    "---------------------------------------------------枚举汇总---------------------------------------------------": {},
+    "x-enum-summary": {
+      "IncidentStatus": "REPORTED → PREDICTED → DISPATCHED → PROCESSING → CLEARED → CLOSED",
+      "TaskStatus": "DISPATCHED → DEPARTED → ARRIVED → PROCESSING → COMPLETED / CANCELLED",
+      "TaskType": "POLICE(警力) / CLEARANCE(清障) / RESCUE(救援) / MEDICAL(医疗)",
+      "UserRole": "FIELD_OFFICER(现场交警) / COMMAND_CENTER(指挥中心) / RESCUE_WORKER(清障救援) / ADMIN(系统管理员)"
+    }
+  },
+  "tags": [
+    {
+      "name": "认证",
+      "description": "用户注册、登录、当前用户信息"
+    },
+    {
+      "name": "健康检查",
+      "description": "系统健康状态检查"
+    },
+    {
+      "name": "事故上报",
+      "description": "交通事故上报、图片上传、后果预测"
+    },
+    {
+      "name": "调度任务",
+      "description": "警力/清障/救援/医疗调度任务管理"
+    },
+    {
+      "name": "系统管理",
+      "description": "用户管理、操作日志"
+    },
+    {
+      "name": "实时推送",
+      "description": "SSE 实时事件推送"
+    },
+    {
+      "name": "示例",
+      "description": "脚手架示例 CRUD"
+    }
+  ]
+}

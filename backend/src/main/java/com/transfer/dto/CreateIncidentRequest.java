@@ -46,11 +46,17 @@ public record CreateIncidentRequest(
         @Min(0)
         Integer trafficFlow,
 
+        @Min(0)
+        Integer peopleFlow,
+
         @Size(max = 40)
         String weather,
 
         @Size(max = 40)
         String roadLevel,
+
+        @Size(max = 40)
+        String roadStatus,
 
         Long reportUserId
 ) {

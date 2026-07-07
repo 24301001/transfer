@@ -8,7 +8,11 @@ import com.transfer.common.ExternalServiceException;
 import com.transfer.common.ResourceNotFoundException;
 import com.transfer.dto.CreateIncidentRequest;
 import com.transfer.dto.IncidentDetailResponse;
+import com.transfer.dto.PredictionAttachmentPayload;
+import com.transfer.dto.PredictionDisplayResponse;
+import com.transfer.dto.PredictionModuleResultRequest;
 import com.transfer.dto.PredictionRequest;
+import com.transfer.dto.PredictionSubmitResponse;
 import com.transfer.enums.CoordinateType;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
@@ -23,6 +27,8 @@ import jakarta.persistence.criteria.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -31,13 +37,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.StringJoiner;
 import java.util.UUID;
 
 @Service
@@ -50,14 +59,11 @@ public class IncidentService {
     private final IncidentAttachmentRepository attachmentRepository;
     private final PredictionResultRepository predictionResultRepository;
     private final DispatchTaskRepository dispatchTaskRepository;
-
     private final PredictionClient predictionClient;
     private final DeepSeekClient deepSeekClient;
-
     private final OperationLogService operationLogService;
     private final RealtimeService realtimeService;
     private final MapService mapService;
-
     private final Path uploadDir;
 
     public IncidentService(
@@ -70,16 +76,12 @@ public class IncidentService {
             OperationLogService operationLogService,
             RealtimeService realtimeService,
             MapService mapService,
-
-            @Value("${app.upload-dir:uploads}")
-            String uploadDir
+            @Value("${app.upload-dir:uploads}") String uploadDir
     ) {
         this.incidentRepository = incidentRepository;
         this.attachmentRepository = attachmentRepository;
-        this.predictionResultRepository =
-                predictionResultRepository;
-        this.dispatchTaskRepository =
-                dispatchTaskRepository;
+        this.predictionResultRepository = predictionResultRepository;
+        this.dispatchTaskRepository = dispatchTaskRepository;
         this.predictionClient = predictionClient;
         this.deepSeekClient = deepSeekClient;
         this.operationLogService = operationLogService;
@@ -91,8 +93,17 @@ public class IncidentService {
                 .normalize();
     }
 
+    /**
+     * 创建事故。
+     */
     @Transactional
     public Incident create(CreateIncidentRequest request) {
+        if (request == null) {
+            throw new BadRequestException(
+                    "Incident request is required"
+            );
+        }
+
         Incident incident = new Incident();
 
         incident.setIncidentNo(generateIncidentNo());
@@ -158,19 +169,19 @@ public class IncidentService {
         incident.setSupportDecisionManual(false);
 
         /*
-         * 在预测结果出来前，根据上报内容做一次初步判断。
+         * 在预测结果产生前，根据上报内容进行初步支援判断。
          */
         applyAutomaticSupportDecision(incident);
 
         /*
-         * 创建事故时尝试生成百度坐标。
-         * 地图服务失败不影响事故本身保存。
+         * 尝试转换或补充百度地图坐标。
+         * 地图服务异常不影响事故的正常创建。
          */
         try {
             mapService.enrichIncident(incident);
         } catch (ExternalServiceException ex) {
             log.warn(
-                    "事故 {} 的百度地图位置解析暂时失败: {}",
+                    "事故 {} 的地图位置解析失败：{}",
                     incident.getIncidentNo(),
                     ex.getMessage()
             );
@@ -202,6 +213,73 @@ public class IncidentService {
         return saved;
     }
 
+    /**
+     * 创建事故并同时上传多个附件。
+     */
+    @Transactional
+    public IncidentDetailResponse createWithAttachments(
+            CreateIncidentRequest request,
+            List<MultipartFile> files
+    ) {
+        Incident incident = create(request);
+
+        if (files != null) {
+            for (MultipartFile file : files) {
+                if (file != null && !file.isEmpty()) {
+                    uploadAttachment(
+                            incident.getId(),
+                            file,
+                            request.reportUserId()
+                    );
+                }
+            }
+        }
+
+        return findDetail(incident.getId());
+    }
+
+    /**
+     * 为一个事故批量上传附件。
+     */
+    @Transactional
+    public List<IncidentAttachment> uploadAttachments(
+            Long incidentId,
+            List<MultipartFile> files,
+            Long uploadedBy
+    ) {
+        if (files == null || files.isEmpty()) {
+            throw new BadRequestException(
+                    "At least one attachment file is required"
+            );
+        }
+
+        List<IncidentAttachment> savedAttachments =
+                new ArrayList<>();
+
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                savedAttachments.add(
+                        uploadAttachment(
+                                incidentId,
+                                file,
+                                uploadedBy
+                        )
+                );
+            }
+        }
+
+        if (savedAttachments.isEmpty()) {
+            throw new BadRequestException(
+                    "At least one non-empty attachment file is required"
+            );
+        }
+
+        return savedAttachments;
+    }
+
+    /**
+     * 上传单个事故附件。
+     */
     @Transactional
     public IncidentAttachment uploadAttachment(
             Long incidentId,
@@ -214,7 +292,8 @@ public class IncidentService {
             );
         }
 
-        Incident incident = findIncident(incidentId);
+        Incident incident =
+                findIncident(incidentId);
 
         try {
             Files.createDirectories(uploadDir);
@@ -231,9 +310,19 @@ public class IncidentService {
                     .resolve(fileName)
                     .normalize();
 
+            /*
+             * 防止保存路径意外逃逸出上传目录。
+             */
+            if (!target.startsWith(uploadDir)) {
+                throw new BadRequestException(
+                        "Invalid attachment file path"
+                );
+            }
+
             Files.copy(
                     file.getInputStream(),
-                    target
+                    target,
+                    StandardCopyOption.REPLACE_EXISTING
             );
 
             IncidentAttachment attachment =
@@ -243,7 +332,9 @@ public class IncidentService {
                     incident.getId()
             );
 
-            attachment.setFileName(fileName);
+            attachment.setFileName(
+                    fileName
+            );
 
             attachment.setOriginalFilename(
                     file.getOriginalFilename() == null
@@ -263,7 +354,13 @@ public class IncidentService {
                     target.toString()
             );
 
-            attachment.setUploadedBy(uploadedBy);
+            attachment.setUploadedBy(
+                    uploadedBy
+            );
+
+            attachment.setRecognitionStatus(
+                    "WAITING_DATA_MODULE"
+            );
 
             IncidentAttachment saved =
                     attachmentRepository.save(attachment);
@@ -278,7 +375,6 @@ public class IncidentService {
             );
 
             return saved;
-
         } catch (IOException ex) {
             throw new BadRequestException(
                     "Failed to save attachment: "
@@ -287,24 +383,127 @@ public class IncidentService {
         }
     }
 
+    /**
+     * 将事故和附件信息提交给数据预测模块。
+     */
     @Transactional
-    public PredictionResult predict(
-            PredictionRequest request
+    public PredictionSubmitResponse submitPredictionRequest(
+            Long incidentId,
+            Long operatorUserId
     ) {
-        PredictionRequest normalized =
-                normalizePredictionRequest(request);
+        Incident incident =
+                findIncident(incidentId);
+
+        List<IncidentAttachment> attachments =
+                attachmentRepository
+                        .findByIncidentIdOrderByCreatedAtAsc(
+                                incidentId
+                        );
+
+        PredictionRequest request =
+                buildPredictionRequest(
+                        incident,
+                        attachments
+                );
+
+        PredictionSubmitResponse response =
+                predictionClient.predict(request);
+
+        if (Boolean.TRUE.equals(response.submitted())) {
+            incident.setStatus(
+                    IncidentStatus.PREDICTION_REQUESTED
+            );
+
+            incidentRepository.save(incident);
+
+            operationLogService.record(
+                    operatorUserId,
+                    "SUBMIT_PREDICTION_REQUEST",
+                    "Incident",
+                    incident.getId().toString(),
+                    null,
+                    response.dataModuleTraceId()
+            );
+
+            realtimeService.publish(
+                    "INCIDENT_PREDICTION_REQUESTED",
+                    Map.of(
+                            "incidentId",
+                            incident.getId(),
+
+                            "incidentNo",
+                            incident.getIncidentNo(),
+
+                            "dataModuleTraceId",
+                            response.dataModuleTraceId() == null
+                                    ? ""
+                                    : response.dataModuleTraceId()
+                    )
+            );
+        }
+
+        return response;
+    }
+
+    /**
+     * 接收数据预测模块返回的预测结果。
+     */
+    @Transactional
+    public PredictionResult acceptPredictionResult(
+            Long incidentId,
+            PredictionModuleResultRequest request,
+            Long operatorUserId
+    ) {
+        if (request == null) {
+            throw new BadRequestException(
+                    "Prediction module result is required"
+            );
+        }
+
+        validatePredictionResult(request);
 
         Incident incident =
-                findIncident(normalized.incidentId());
+                findIncident(incidentId);
+
+        String riskFactors =
+                joinRiskFactors(
+                        request.riskFactors()
+                );
+
+        String suggestions =
+                firstNonBlank(
+                        request.suggestion(),
+                        buildDispositionSuggestion(
+                                incident,
+                                request,
+                                riskFactors
+                        )
+                );
 
         PredictionOutcome outcome =
-                predictionClient.predict(normalized);
+                new PredictionOutcome(
+                        request.accidentType(),
+                        request.riskLevel(),
+                        request.congestionDurationMinutes(),
+                        request.recoveryDurationMinutes(),
+                        request.confidence(),
+                        firstNonBlank(
+                                request.modelVersion(),
+                                "data-module"
+                        ),
+                        suggestions,
+                        request.riskFactors(),
+                        request.evidenceSummary()
+                );
 
         String explanation =
-                deepSeekClient.explain(
-                        outcome,
-                        incident.getLocationName(),
-                        incident.getDescription()
+                firstNonBlank(
+                        request.explanation(),
+                        deepSeekClient.explain(
+                                outcome,
+                                incident.getLocationName(),
+                                incident.getDescription()
+                        )
                 );
 
         PredictionResult result =
@@ -315,23 +514,23 @@ public class IncidentService {
         );
 
         result.setAccidentType(
-                outcome.accidentType()
+                request.accidentType().trim()
         );
 
         result.setRiskLevel(
-                outcome.riskLevel()
+                request.riskLevel()
         );
 
         result.setCongestionDurationMinutes(
-                outcome.congestionDurationMinutes()
+                request.congestionDurationMinutes()
         );
 
         result.setRecoveryDurationMinutes(
-                outcome.recoveryDurationMinutes()
+                request.recoveryDurationMinutes()
         );
 
         result.setConfidence(
-                outcome.confidence()
+                request.confidence()
         );
 
         result.setModelVersion(
@@ -339,58 +538,44 @@ public class IncidentService {
         );
 
         result.setSuggestions(
-                outcome.suggestions()
+                suggestions
         );
 
-        result.setExplanation(explanation);
+        result.setExplanation(
+                explanation
+        );
+
+        result.setRiskFactors(
+                riskFactors
+        );
+
+        result.setEvidenceSummary(
+                trimToNull(request.evidenceSummary())
+        );
+
+        result.setDataModuleTraceId(
+                trimToNull(request.dataModuleTraceId())
+        );
+
+        result.setRawResult(
+                request.rawResult()
+        );
 
         PredictionResult saved =
                 predictionResultRepository.save(result);
 
-        incident.setConfirmedAccidentType(
-                outcome.accidentType()
+        updateIncidentFromPrediction(
+                incident,
+                saved
         );
-
-        incident.setRiskLevel(
-                outcome.riskLevel()
-        );
-
-        incident.setPredictedCongestionMinutes(
-                outcome.congestionDurationMinutes()
-        );
-
-        incident.setPredictedRecoveryMinutes(
-                outcome.recoveryDurationMinutes()
-        );
-
-        incident.setConfidence(
-                outcome.confidence()
-        );
-
-        incident.setSuggestion(
-                outcome.suggestions()
-        );
-
-        incident.setExplanation(explanation);
-
-        incident.setStatus(
-                IncidentStatus.PREDICTED
-        );
-
-        /*
-         * 预测结果产生后重新判断是否需要支援。
-         */
-        applyAutomaticSupportDecision(incident);
-
-        incidentRepository.save(incident);
 
         operationLogService.record(
-                null,
-                "PREDICT_INCIDENT",
+                operatorUserId,
+                "ACCEPT_PREDICTION_RESULT",
                 "Incident",
                 incident.getId().toString(),
                 null,
-                outcome.riskLevel().name()
+                saved.getRiskLevel().name()
         );
 
         realtimeService.publish(
@@ -402,20 +587,139 @@ public class IncidentService {
                         "incidentNo",
                         incident.getIncidentNo(),
 
+                        "accidentType",
+                        saved.getAccidentType(),
+
                         "riskLevel",
-                        outcome.riskLevel(),
+                        saved.getRiskLevel(),
 
                         "congestionDurationMinutes",
-                        outcome.congestionDurationMinutes(),
+                        saved.getCongestionDurationMinutes(),
+
+                        "recoveryDurationMinutes",
+                        saved.getRecoveryDurationMinutes(),
 
                         "supportRequired",
-                        incident.getSupportRequired()
+                        Boolean.TRUE.equals(
+                                incident.getSupportRequired()
+                        )
                 )
         );
 
         return saved;
     }
 
+    /**
+     * 查询事故附件。
+     */
+    @Transactional(readOnly = true)
+    public IncidentAttachment findAttachment(
+            Long incidentId,
+            Long attachmentId
+    ) {
+        Incident incident =
+                findIncident(incidentId);
+
+        if (attachmentId == null) {
+            throw new BadRequestException(
+                    "attachmentId is required"
+            );
+        }
+
+        IncidentAttachment attachment =
+                attachmentRepository
+                        .findById(attachmentId)
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "Attachment not found: "
+                                                + attachmentId
+                                )
+                        );
+
+        if (!incident.getId().equals(
+                attachment.getIncidentId()
+        )) {
+            throw new ResourceNotFoundException(
+                    "Attachment not found for incident: "
+                            + incidentId
+            );
+        }
+
+        return attachment;
+    }
+
+    /**
+     * 加载附件文件。
+     */
+    @Transactional(readOnly = true)
+    public Resource loadAttachmentFile(
+            IncidentAttachment attachment
+    ) {
+        if (attachment == null
+                || attachment.getFilePath() == null
+                || attachment.getFilePath().isBlank()) {
+            throw new ResourceNotFoundException(
+                    "Attachment file path is empty"
+            );
+        }
+
+        try {
+            Path path = Path.of(
+                            attachment.getFilePath()
+                    )
+                    .toAbsolutePath()
+                    .normalize();
+
+            Resource resource =
+                    new UrlResource(path.toUri());
+
+            if (!resource.exists()
+                    || !resource.isReadable()) {
+                throw new ResourceNotFoundException(
+                        "Attachment file not found: "
+                                + attachment.getId()
+                );
+            }
+
+            return resource;
+        } catch (MalformedURLException ex) {
+            throw new BadRequestException(
+                    "Invalid attachment file path"
+            );
+        }
+    }
+
+    /**
+     * 查询最新预测结果。
+     */
+    @Transactional(readOnly = true)
+    public PredictionDisplayResponse findLatestPrediction(
+            Long incidentId
+    ) {
+        Incident incident =
+                findIncident(incidentId);
+
+        PredictionResult result =
+                predictionResultRepository
+                        .findFirstByIncidentIdOrderByCreatedAtDesc(
+                                incidentId
+                        )
+                        .orElseThrow(
+                                () -> new ResourceNotFoundException(
+                                        "Prediction result not found for incident: "
+                                                + incidentId
+                                )
+                        );
+
+        return PredictionDisplayResponse.from(
+                incident,
+                result
+        );
+    }
+
+    /**
+     * 分页查询事故。
+     */
     @Transactional(readOnly = true)
     public Page<Incident> findAll(
             IncidentStatus status,
@@ -433,11 +737,15 @@ public class IncidentService {
         );
     }
 
+    /**
+     * 查询事故详情。
+     */
     @Transactional(readOnly = true)
     public IncidentDetailResponse findDetail(
             Long incidentId
     ) {
-        Incident incident = findIncident(incidentId);
+        Incident incident =
+                findIncident(incidentId);
 
         return new IncidentDetailResponse(
                 incident,
@@ -459,6 +767,9 @@ public class IncidentService {
         );
     }
 
+    /**
+     * 更新事故状态。
+     */
     @Transactional
     public Incident updateStatus(
             Long incidentId,
@@ -478,8 +789,13 @@ public class IncidentService {
         return incidentRepository.save(incident);
     }
 
+    /**
+     * 根据ID查询事故。
+     */
     @Transactional(readOnly = true)
-    public Incident findIncident(Long incidentId) {
+    public Incident findIncident(
+            Long incidentId
+    ) {
         if (incidentId == null) {
             throw new BadRequestException(
                     "incidentId is required"
@@ -496,62 +812,100 @@ public class IncidentService {
                 );
     }
 
-    private PredictionRequest normalizePredictionRequest(
-            PredictionRequest request
+    /**
+     * 构造发送给数据预测模块的请求。
+     */
+    private PredictionRequest buildPredictionRequest(
+            Incident incident,
+            List<IncidentAttachment> attachments
     ) {
-        if (request == null
-                || request.incidentId() == null) {
-            throw new BadRequestException(
-                    "incidentId is required for prediction"
-            );
-        }
-
-        Incident incident =
-                findIncident(request.incidentId());
+        List<PredictionAttachmentPayload> attachmentPayloads =
+                attachments == null
+                        ? List.of()
+                        : attachments.stream()
+                        .map(this::toPredictionAttachmentPayload)
+                        .toList();
 
         return new PredictionRequest(
                 incident.getId(),
-
-                firstNonBlank(
-                        request.locationName(),
-                        incident.getLocationName()
-                ),
-
-                firstNonBlank(
-                        request.roadName(),
-                        incident.getRoadName()
-                ),
-
-                firstNonBlank(
-                        request.accidentType(),
-                        incident.getInitialAccidentType()
-                ),
-
-                firstNonBlank(
-                        request.description(),
-                        incident.getDescription()
-                ),
-
-                request.occupiedLanes() != null
-                        ? request.occupiedLanes()
-                        : incident.getOccupiedLanes(),
-
-                request.trafficFlow() != null
-                        ? request.trafficFlow()
-                        : incident.getTrafficFlow(),
-
-                firstNonBlank(
-                        request.weather(),
-                        incident.getWeather()
-                ),
-
-                firstNonBlank(
-                        request.roadLevel(),
-                        incident.getRoadLevel()
-                )
+                incident.getIncidentNo(),
+                incident.getLocationName(),
+                incident.getAddress(),
+                incident.getLongitude(),
+                incident.getLatitude(),
+                incident.getRoadName(),
+                incident.getInitialAccidentType(),
+                incident.getDescription(),
+                incident.getOccupiedLanes(),
+                incident.getTrafficFlow(),
+                incident.getWeather(),
+                incident.getRoadLevel(),
+                attachmentPayloads
         );
     }
 
+    private PredictionAttachmentPayload toPredictionAttachmentPayload(
+            IncidentAttachment attachment
+    ) {
+        return new PredictionAttachmentPayload(
+                attachment.getId(),
+                attachment.getOriginalFilename(),
+                attachment.getContentType(),
+                attachment.getFileSize(),
+                attachment.getFilePath()
+        );
+    }
+
+    /**
+     * 用预测结果更新事故主表。
+     */
+    private void updateIncidentFromPrediction(
+            Incident incident,
+            PredictionResult result
+    ) {
+        incident.setConfirmedAccidentType(
+                result.getAccidentType()
+        );
+
+        incident.setRiskLevel(
+                result.getRiskLevel()
+        );
+
+        incident.setPredictedCongestionMinutes(
+                result.getCongestionDurationMinutes()
+        );
+
+        incident.setPredictedRecoveryMinutes(
+                result.getRecoveryDurationMinutes()
+        );
+
+        incident.setConfidence(
+                result.getConfidence()
+        );
+
+        incident.setSuggestion(
+                result.getSuggestions()
+        );
+
+        incident.setExplanation(
+                result.getExplanation()
+        );
+
+        incident.setStatus(
+                IncidentStatus.PREDICTED
+        );
+
+        /*
+         * 预测完成后，重新进行自动支援判断。
+         */
+        applyAutomaticSupportDecision(incident);
+
+        incidentRepository.save(incident);
+    }
+
+    /**
+     * 构造事故分页查询条件。
+     */
     private Specification<Incident> buildSpecification(
             IncidentStatus status,
             RiskLevel riskLevel,
@@ -632,12 +986,14 @@ public class IncidentService {
         };
     }
 
+    /**
+     * 根据事故数据自动判断是否需要支援。
+     */
     private void applyAutomaticSupportDecision(
             Incident incident
     ) {
         /*
-         * 指挥中心已经人工判断过时，
-         * 不再由系统自动覆盖。
+         * 指挥中心已经人工判断时，不再自动覆盖。
          */
         if (Boolean.TRUE.equals(
                 incident.getSupportDecisionManual()
@@ -694,8 +1050,8 @@ public class IncidentService {
                                 incident.getDescription(),
                                 ""
                         )
-                        + " "
-                        + firstNonBlank(
+                                + " "
+                                + firstNonBlank(
                                 incident.getConfirmedAccidentType(),
                                 incident.getInitialAccidentType(),
                                 ""
@@ -724,8 +1080,15 @@ public class IncidentService {
             String text,
             String... words
     ) {
+        if (text == null) {
+            return false;
+        }
+
         for (String word : words) {
-            if (text.contains(word.toLowerCase())) {
+            if (word != null
+                    && text.contains(
+                    word.toLowerCase()
+            )) {
                 return true;
             }
         }
@@ -736,12 +1099,13 @@ public class IncidentService {
     private String generateIncidentNo() {
         return "ACC"
                 + LocalDateTime.now().format(
-                        DateTimeFormatter.ofPattern(
-                                "yyyyMMddHHmmss"
-                        )
+                DateTimeFormatter.ofPattern(
+                        "yyyyMMddHHmmss"
                 )
+        )
                 + UUID.randomUUID()
                 .toString()
+                .replace("-", "")
                 .substring(0, 6);
     }
 
@@ -771,7 +1135,8 @@ public class IncidentService {
         }
 
         for (String value : values) {
-            if (value != null && !value.isBlank()) {
+            if (value != null
+                    && !value.isBlank()) {
                 return value.trim();
             }
         }
@@ -779,10 +1144,145 @@ public class IncidentService {
         return null;
     }
 
-    private String trimToNull(String value) {
+    private String trimToNull(
+            String value
+    ) {
         return value == null
                 || value.trim().isEmpty()
                 ? null
                 : value.trim();
+    }
+
+    /**
+     * 校验数据模块返回的预测结果。
+     */
+    private void validatePredictionResult(
+            PredictionModuleResultRequest request
+    ) {
+        if (request.accidentType() == null
+                || request.accidentType().isBlank()) {
+            throw new BadRequestException(
+                    "accidentType is required"
+            );
+        }
+
+        if (request.riskLevel() == null) {
+            throw new BadRequestException(
+                    "riskLevel is required"
+            );
+        }
+
+        if (request.congestionDurationMinutes() == null
+                || request.congestionDurationMinutes() < 0) {
+            throw new BadRequestException(
+                    "congestionDurationMinutes must be greater than or equal to 0"
+            );
+        }
+
+        if (request.recoveryDurationMinutes() == null
+                || request.recoveryDurationMinutes() < 0) {
+            throw new BadRequestException(
+                    "recoveryDurationMinutes must be greater than or equal to 0"
+            );
+        }
+
+        if (request.recoveryDurationMinutes()
+                < request.congestionDurationMinutes()) {
+            throw new BadRequestException(
+                    "recoveryDurationMinutes should not be less than congestionDurationMinutes"
+            );
+        }
+
+        if (request.confidence() == null
+                || request.confidence() < 0
+                || request.confidence() > 1) {
+            throw new BadRequestException(
+                    "confidence must be between 0 and 1"
+            );
+        }
+    }
+
+    /**
+     * 根据预测结果生成调度建议。
+     */
+    private String buildDispositionSuggestion(
+            Incident incident,
+            PredictionModuleResultRequest request,
+            String riskFactors
+    ) {
+        StringJoiner joiner =
+                new StringJoiner(" ");
+
+        joiner.add(
+                switch (request.riskLevel()) {
+                    case LOW ->
+                            "低风险：现场交警可设置警示标志，引导车辆减速通过，持续观察现场变化。";
+
+                    case MEDIUM ->
+                            "中风险：建议保护事故现场，视情况实施局部车道管控，并通知指挥中心关注拥堵变化。";
+
+                    case HIGH ->
+                            "高风险：建议立即通知指挥中心，安排警力到场，优先疏导受影响车道，并联系清障车辆。";
+
+                    case CRITICAL ->
+                            "严重风险：建议启动应急处置流程，联动交警、清障、救援和医疗资源，扩大交通管制范围。";
+                }
+        );
+
+        String accidentType =
+                request.accidentType().toLowerCase();
+
+        if (accidentType.contains("封闭")
+                || accidentType.contains("block")) {
+            joiner.add(
+                    "事故涉及道路封闭或车道阻断，应优先设置分流路线。"
+            );
+        }
+
+        if (incident.getOccupiedLanes() != null
+                && incident.getOccupiedLanes() >= 2) {
+            joiner.add(
+                    "占用车道较多，建议提前发布绕行提示。"
+            );
+        }
+
+        if (riskFactors != null
+                && !riskFactors.isBlank()) {
+            joiner.add(
+                    "主要风险因子："
+                            + riskFactors
+                            + "。"
+            );
+        }
+
+        return joiner.toString();
+    }
+
+    private String joinRiskFactors(
+            List<String> riskFactors
+    ) {
+        if (riskFactors == null
+                || riskFactors.isEmpty()) {
+            return null;
+        }
+
+        StringJoiner joiner =
+                new StringJoiner("、");
+
+        for (String factor : riskFactors) {
+            if (factor != null
+                    && !factor.isBlank()) {
+                joiner.add(
+                        factor.trim()
+                );
+            }
+        }
+
+        String result =
+                joiner.toString();
+
+        return result.isBlank()
+                ? null
+                : result;
     }
 }

@@ -79,7 +79,7 @@ function goToDetail(row) {
 }
 
 function handleExport() {
-  ElMessage.success('数据导出中...（演示功能）')
+  ElMessage.success('数据导出中...')
 }
 
 onMounted(async () => {

@@ -15,10 +15,10 @@ public class DemoDataInitializer {
     @Bean
     CommandLineRunner seedUsers(UserAccountRepository userAccountRepository) {
         return args -> {
-            createUserIfMissing(userAccountRepository, "field01", "Field Officer", UserRole.FIELD_OFFICER, "13800000001", "field01@example.com");
-            createUserIfMissing(userAccountRepository, "command01", "Command Center", UserRole.COMMAND_CENTER, "13800000002", "command01@example.com");
-            createUserIfMissing(userAccountRepository, "rescue01", "Rescue Worker", UserRole.RESCUE_WORKER, "13800000003", "rescue01@example.com");
-            createUserIfMissing(userAccountRepository, "admin", "System Admin", UserRole.ADMIN, "13800000004", "admin@example.com");
+            createUserIfMissing(userAccountRepository, "police1", "张警官", UserRole.FIELD_OFFICER, "13800000001", "police1@example.com");
+            createUserIfMissing(userAccountRepository, "command1", "李指挥", UserRole.COMMAND_CENTER, "13800000002", "command1@example.com");
+            createUserIfMissing(userAccountRepository, "rescue1", "王队长", UserRole.RESCUE_WORKER, "13800000003", "rescue1@example.com");
+            createUserIfMissing(userAccountRepository, "admin1", "赵管理", UserRole.ADMIN, "13800000004", "admin1@example.com");
         };
     }
 

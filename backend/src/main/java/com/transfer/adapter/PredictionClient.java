@@ -1,7 +1,8 @@
 package com.transfer.adapter;
 
 import com.transfer.dto.PredictionRequest;
+import com.transfer.dto.PredictionSubmitResponse;
 
 public interface PredictionClient {
-    PredictionOutcome predict(PredictionRequest request);
+    PredictionSubmitResponse predict(PredictionRequest request);
 }
