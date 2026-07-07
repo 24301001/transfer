@@ -1,0 +1,90 @@
+@use './variables' as *;
+
+// ========== 全局重置 & 基础样式 ==========
+
+body {
+  background-color: $bg;
+  color: $text-primary;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a {
+  color: $primary;
+  text-decoration: none;
+  &:hover {
+    color: $primary-light;
+  }
+}
+
+// ========== Element Plus 主题覆盖 ==========
+
+// 主色切换
+:root {
+  --el-color-primary: #{$primary};
+  --el-color-primary-light-3: #{$primary-light};
+  --el-color-primary-light-5: #{$primary-lighter};
+  --el-color-primary-dark-2: #{$primary-dark};
+}
+
+// ========== 呼吸式背景动画 ==========
+@keyframes breathe {
+  0% {
+    background-position: 0% 50%;
+    background-size: 200% 200%;
+  }
+  25% {
+    background-position: 50% 0%;
+    background-size: 220% 220%;
+  }
+  50% {
+    background-position: 100% 50%;
+    background-size: 200% 200%;
+  }
+  75% {
+    background-position: 50% 100%;
+    background-size: 220% 220%;
+  }
+  100% {
+    background-position: 0% 50%;
+    background-size: 200% 200%;
+  }
+}
+
+// ========== 通用卡片样式 ==========
+.page-card {
+  background: $bg-white;
+  border-radius: $radius-lg;
+  padding: 24px;
+  box-shadow: $shadow-sm;
+}
+
+.page-header {
+  margin-bottom: 24px;
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: $text-primary;
+  }
+  p {
+    font-size: 14px;
+    color: $text-secondary;
+    margin-top: 4px;
+  }
+}
+
+// ========== 滚动条美化 ==========
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
