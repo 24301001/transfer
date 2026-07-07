@@ -19,4 +19,17 @@ public final class PasswordUtils {
             throw new IllegalStateException("SHA-256 is not available", ex);
         }
     }
+
+    public static boolean matches(String rawPassword, String storedPasswordHash) {
+        if (rawPassword == null || storedPasswordHash == null || storedPasswordHash.isBlank()) {
+            return false;
+        }
+
+        String calculatedHash = sha256(rawPassword);
+
+        return MessageDigest.isEqual(
+                calculatedHash.getBytes(StandardCharsets.UTF_8),
+                storedPasswordHash.getBytes(StandardCharsets.UTF_8)
+        );
+    }
 }
