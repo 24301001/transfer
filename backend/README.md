@@ -1,8 +1,8 @@
-# Transfer Backend
+# 道路交通事故风险预估与后果预测系统后端
 
 Spring Boot backend for the road traffic accident risk estimation and consequence prediction system.
 
-## Run
+## 运行
 
 ```bash
 mvn spring-boot:run
@@ -25,4 +25,4 @@ Username: sa
 Password:
 ```
 
-See `BACKEND_API.md` for endpoint details and request examples.
+See `BACKEND_API.md` for endpoint details and request examples. The root `README.md` contains the full project overview, startup guide, core modules and API list.
