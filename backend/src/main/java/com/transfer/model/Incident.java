@@ -1,5 +1,6 @@
 package com.transfer.model;
 
+import com.transfer.enums.CoordinateType;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
 import jakarta.persistence.Column;
@@ -7,6 +8,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "incidents")
@@ -21,9 +24,38 @@ public class Incident extends AuditableEntity {
     @Column(length = 255)
     private String address;
 
+    /**
+     * 原始坐标。
+     */
     private Double longitude;
 
     private Double latitude;
+
+    /**
+     * 原始坐标类型。
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private CoordinateType coordinateType = CoordinateType.WGS84;
+
+    /**
+     * 转换后的百度地图 BD09 坐标。
+     */
+    private Double baiduLongitude;
+
+    private Double baiduLatitude;
+
+    /**
+     * 百度地图返回的标准地址。
+     */
+    @Column(length = 255)
+    private String mapFormattedAddress;
+
+    /**
+     * 百度地图返回的位置语义描述。
+     */
+    @Column(length = 500)
+    private String mapSemanticDescription;
 
     @Column(length = 80)
     private String roadName;
@@ -67,6 +99,26 @@ public class Incident extends AuditableEntity {
     @Column(length = 1500)
     private String explanation;
 
+    /**
+     * FR-18：是否需要支援。
+     */
+    @Column(nullable = false)
+    private Boolean supportRequired = false;
+
+    @Column(length = 500)
+    private String supportReason;
+
+    /**
+     * 是否由指挥人员手动修改过支援判断。
+     * 手动修改后，自动规则不再覆盖。
+     */
+    @Column(nullable = false)
+    private Boolean supportDecisionManual = false;
+
+    private Long supportDecisionByUserId;
+
+    private LocalDateTime supportDecisionAt;
+
     private Long reportUserId;
 
     public String getIncidentNo() {
@@ -109,6 +161,48 @@ public class Incident extends AuditableEntity {
         this.latitude = latitude;
     }
 
+    public CoordinateType getCoordinateType() {
+        return coordinateType;
+    }
+
+    public void setCoordinateType(CoordinateType coordinateType) {
+        this.coordinateType = coordinateType;
+    }
+
+    public Double getBaiduLongitude() {
+        return baiduLongitude;
+    }
+
+    public void setBaiduLongitude(Double baiduLongitude) {
+        this.baiduLongitude = baiduLongitude;
+    }
+
+    public Double getBaiduLatitude() {
+        return baiduLatitude;
+    }
+
+    public void setBaiduLatitude(Double baiduLatitude) {
+        this.baiduLatitude = baiduLatitude;
+    }
+
+    public String getMapFormattedAddress() {
+        return mapFormattedAddress;
+    }
+
+    public void setMapFormattedAddress(String mapFormattedAddress) {
+        this.mapFormattedAddress = mapFormattedAddress;
+    }
+
+    public String getMapSemanticDescription() {
+        return mapSemanticDescription;
+    }
+
+    public void setMapSemanticDescription(
+            String mapSemanticDescription
+    ) {
+        this.mapSemanticDescription = mapSemanticDescription;
+    }
+
     public String getRoadName() {
         return roadName;
     }
@@ -121,7 +215,9 @@ public class Incident extends AuditableEntity {
         return initialAccidentType;
     }
 
-    public void setInitialAccidentType(String initialAccidentType) {
+    public void setInitialAccidentType(
+            String initialAccidentType
+    ) {
         this.initialAccidentType = initialAccidentType;
     }
 
@@ -129,7 +225,9 @@ public class Incident extends AuditableEntity {
         return confirmedAccidentType;
     }
 
-    public void setConfirmedAccidentType(String confirmedAccidentType) {
+    public void setConfirmedAccidentType(
+            String confirmedAccidentType
+    ) {
         this.confirmedAccidentType = confirmedAccidentType;
     }
 
@@ -193,16 +291,22 @@ public class Incident extends AuditableEntity {
         return predictedCongestionMinutes;
     }
 
-    public void setPredictedCongestionMinutes(Integer predictedCongestionMinutes) {
-        this.predictedCongestionMinutes = predictedCongestionMinutes;
+    public void setPredictedCongestionMinutes(
+            Integer predictedCongestionMinutes
+    ) {
+        this.predictedCongestionMinutes =
+                predictedCongestionMinutes;
     }
 
     public Integer getPredictedRecoveryMinutes() {
         return predictedRecoveryMinutes;
     }
 
-    public void setPredictedRecoveryMinutes(Integer predictedRecoveryMinutes) {
-        this.predictedRecoveryMinutes = predictedRecoveryMinutes;
+    public void setPredictedRecoveryMinutes(
+            Integer predictedRecoveryMinutes
+    ) {
+        this.predictedRecoveryMinutes =
+                predictedRecoveryMinutes;
     }
 
     public Double getConfidence() {
@@ -227,6 +331,53 @@ public class Incident extends AuditableEntity {
 
     public void setExplanation(String explanation) {
         this.explanation = explanation;
+    }
+
+    public Boolean getSupportRequired() {
+        return supportRequired;
+    }
+
+    public void setSupportRequired(Boolean supportRequired) {
+        this.supportRequired = supportRequired;
+    }
+
+    public String getSupportReason() {
+        return supportReason;
+    }
+
+    public void setSupportReason(String supportReason) {
+        this.supportReason = supportReason;
+    }
+
+    public Boolean getSupportDecisionManual() {
+        return supportDecisionManual;
+    }
+
+    public void setSupportDecisionManual(
+            Boolean supportDecisionManual
+    ) {
+        this.supportDecisionManual = supportDecisionManual;
+    }
+
+    public Long getSupportDecisionByUserId() {
+        return supportDecisionByUserId;
+    }
+
+    public void setSupportDecisionByUserId(
+            Long supportDecisionByUserId
+    ) {
+        this.supportDecisionByUserId =
+                supportDecisionByUserId;
+    }
+
+    public LocalDateTime getSupportDecisionAt() {
+        return supportDecisionAt;
+    }
+
+    public void setSupportDecisionAt(
+            LocalDateTime supportDecisionAt
+    ) {
+        this.supportDecisionAt = supportDecisionAt;
     }
 
     public Long getReportUserId() {
