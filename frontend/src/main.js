@@ -7,7 +7,7 @@ import App from './App.vue'
 import router from './router'
 import { setupStore } from './stores'
 import './assets/styles/global.scss'
-import './services/mock'
+// import './services/mock'
 import './router/permission'
 
 const app = createApp(App)
