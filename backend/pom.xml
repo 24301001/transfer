@@ -12,13 +12,13 @@
     </parent>
 
     <groupId>com.transfer</groupId>
-    <artifactId>transfer-backend</artifactId>
+    <artifactId>traffic-risk-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>transfer-backend</name>
-    <description>Transfer Backend Service</description>
+    <name>traffic-risk-backend</name>
+    <description>Road traffic accident risk estimation and consequence prediction backend</description>
 
     <properties>
-        <java.version>21</java.version>
+        <java.version>17</java.version>
     </properties>
 
     <dependencies>
