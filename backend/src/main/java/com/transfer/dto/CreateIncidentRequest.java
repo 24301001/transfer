@@ -12,8 +12,10 @@ public record CreateIncidentRequest(
         @NotBlank String description,
         Integer occupiedLanes,
         Integer trafficFlow,
+        Integer peopleFlow,
         String weather,
         String roadLevel,
+        String roadStatus,
         Long reportUserId
 ) {
 }

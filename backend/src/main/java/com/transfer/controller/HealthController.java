@@ -17,7 +17,7 @@ public class HealthController {
                 LocalDateTime.now(),
                 Map.of(
                         "database", "H2/JPA",
-                        "predictionClient", "fallback-rule-v1",
+                        "predictionClient", "fallback-rule-v2",
                         "deepSeekClient", "placeholder",
                         "mapProvider", "baidu-placeholder"
                 )

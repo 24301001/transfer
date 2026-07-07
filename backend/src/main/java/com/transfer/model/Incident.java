@@ -41,11 +41,16 @@ public class Incident extends AuditableEntity {
 
     private Integer trafficFlow;
 
+    private Integer peopleFlow;
+
     @Column(length = 40)
     private String weather;
 
     @Column(length = 40)
     private String roadLevel;
+
+    @Column(length = 80)
+    private String roadStatus;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
@@ -157,6 +162,14 @@ public class Incident extends AuditableEntity {
         this.trafficFlow = trafficFlow;
     }
 
+    public Integer getPeopleFlow() {
+        return peopleFlow;
+    }
+
+    public void setPeopleFlow(Integer peopleFlow) {
+        this.peopleFlow = peopleFlow;
+    }
+
     public String getWeather() {
         return weather;
     }
@@ -171,6 +184,14 @@ public class Incident extends AuditableEntity {
 
     public void setRoadLevel(String roadLevel) {
         this.roadLevel = roadLevel;
+    }
+
+    public String getRoadStatus() {
+        return roadStatus;
+    }
+
+    public void setRoadStatus(String roadStatus) {
+        this.roadStatus = roadStatus;
     }
 
     public IncidentStatus getStatus() {
