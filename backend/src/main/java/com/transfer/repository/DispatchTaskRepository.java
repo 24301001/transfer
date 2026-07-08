@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface DispatchTaskRepository
         extends JpaRepository<DispatchTask, Long> {
@@ -34,6 +35,12 @@ public interface DispatchTaskRepository
             Long incidentId,
             TaskType taskType,
             Long receiverUserId,
+            Collection<TaskStatus> statuses
+    );
+
+    Optional<DispatchTask>
+    findFirstByEmergencyVehicleIdAndStatusInOrderByCreatedAtDesc(
+            Long emergencyVehicleId,
             Collection<TaskStatus> statuses
     );
 }

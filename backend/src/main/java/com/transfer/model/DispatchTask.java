@@ -53,6 +53,43 @@ public class DispatchTask extends AuditableEntity {
 
     private LocalDateTime completedAt;
 
+    /**
+     * 以下字段用于救护车/清障车调度与轨迹计算。
+     */
+    private Long emergencyVehicleId;
+
+    @Column(length = 40)
+    private String emergencyVehicleNo;
+
+    @Column(length = 80)
+    private String emergencyVehicleName;
+
+    private Double vehicleStartLongitude;
+
+    private Double vehicleStartLatitude;
+
+    private Double vehicleStartBaiduLongitude;
+
+    private Double vehicleStartBaiduLatitude;
+
+    private Double incidentTargetLongitude;
+
+    private Double incidentTargetLatitude;
+
+    private Double incidentTargetBaiduLongitude;
+
+    private Double incidentTargetBaiduLatitude;
+
+    private Double dispatchDistanceKm;
+
+    private Double dispatchSpeedKmh;
+
+    private Integer estimatedArrivalMinutes;
+
+    private LocalDateTime departedAt;
+
+    private LocalDateTime arrivedAt;
+
     public String getTaskNo() {
         return taskNo;
     }
@@ -155,5 +192,133 @@ public class DispatchTask extends AuditableEntity {
 
     public void setCompletedAt(LocalDateTime completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public Long getEmergencyVehicleId() {
+        return emergencyVehicleId;
+    }
+
+    public void setEmergencyVehicleId(Long emergencyVehicleId) {
+        this.emergencyVehicleId = emergencyVehicleId;
+    }
+
+    public String getEmergencyVehicleNo() {
+        return emergencyVehicleNo;
+    }
+
+    public void setEmergencyVehicleNo(String emergencyVehicleNo) {
+        this.emergencyVehicleNo = emergencyVehicleNo;
+    }
+
+    public String getEmergencyVehicleName() {
+        return emergencyVehicleName;
+    }
+
+    public void setEmergencyVehicleName(String emergencyVehicleName) {
+        this.emergencyVehicleName = emergencyVehicleName;
+    }
+
+    public Double getVehicleStartLongitude() {
+        return vehicleStartLongitude;
+    }
+
+    public void setVehicleStartLongitude(Double vehicleStartLongitude) {
+        this.vehicleStartLongitude = vehicleStartLongitude;
+    }
+
+    public Double getVehicleStartLatitude() {
+        return vehicleStartLatitude;
+    }
+
+    public void setVehicleStartLatitude(Double vehicleStartLatitude) {
+        this.vehicleStartLatitude = vehicleStartLatitude;
+    }
+
+    public Double getVehicleStartBaiduLongitude() {
+        return vehicleStartBaiduLongitude;
+    }
+
+    public void setVehicleStartBaiduLongitude(Double vehicleStartBaiduLongitude) {
+        this.vehicleStartBaiduLongitude = vehicleStartBaiduLongitude;
+    }
+
+    public Double getVehicleStartBaiduLatitude() {
+        return vehicleStartBaiduLatitude;
+    }
+
+    public void setVehicleStartBaiduLatitude(Double vehicleStartBaiduLatitude) {
+        this.vehicleStartBaiduLatitude = vehicleStartBaiduLatitude;
+    }
+
+    public Double getIncidentTargetLongitude() {
+        return incidentTargetLongitude;
+    }
+
+    public void setIncidentTargetLongitude(Double incidentTargetLongitude) {
+        this.incidentTargetLongitude = incidentTargetLongitude;
+    }
+
+    public Double getIncidentTargetLatitude() {
+        return incidentTargetLatitude;
+    }
+
+    public void setIncidentTargetLatitude(Double incidentTargetLatitude) {
+        this.incidentTargetLatitude = incidentTargetLatitude;
+    }
+
+    public Double getIncidentTargetBaiduLongitude() {
+        return incidentTargetBaiduLongitude;
+    }
+
+    public void setIncidentTargetBaiduLongitude(Double incidentTargetBaiduLongitude) {
+        this.incidentTargetBaiduLongitude = incidentTargetBaiduLongitude;
+    }
+
+    public Double getIncidentTargetBaiduLatitude() {
+        return incidentTargetBaiduLatitude;
+    }
+
+    public void setIncidentTargetBaiduLatitude(Double incidentTargetBaiduLatitude) {
+        this.incidentTargetBaiduLatitude = incidentTargetBaiduLatitude;
+    }
+
+    public Double getDispatchDistanceKm() {
+        return dispatchDistanceKm;
+    }
+
+    public void setDispatchDistanceKm(Double dispatchDistanceKm) {
+        this.dispatchDistanceKm = dispatchDistanceKm;
+    }
+
+    public Double getDispatchSpeedKmh() {
+        return dispatchSpeedKmh;
+    }
+
+    public void setDispatchSpeedKmh(Double dispatchSpeedKmh) {
+        this.dispatchSpeedKmh = dispatchSpeedKmh;
+    }
+
+    public Integer getEstimatedArrivalMinutes() {
+        return estimatedArrivalMinutes;
+    }
+
+    public void setEstimatedArrivalMinutes(Integer estimatedArrivalMinutes) {
+        this.estimatedArrivalMinutes = estimatedArrivalMinutes;
+    }
+
+    public LocalDateTime getDepartedAt() {
+        return departedAt;
+    }
+
+    public void setDepartedAt(LocalDateTime departedAt) {
+        this.departedAt = departedAt;
+    }
+
+    public LocalDateTime getArrivedAt() {
+        return arrivedAt;
+    }
+
+    public void setArrivedAt(LocalDateTime arrivedAt) {
+        this.arrivedAt = arrivedAt;
     }
 }

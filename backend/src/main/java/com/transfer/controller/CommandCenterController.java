@@ -3,16 +3,24 @@ package com.transfer.controller;
 import com.transfer.dto.CommandDispatchRequest;
 import com.transfer.dto.CommandIncidentDetailResponse;
 import com.transfer.dto.CommandIncidentSummaryResponse;
+import com.transfer.dto.DispatchVehicleRequest;
 import com.transfer.dto.IncidentMapMarkerResponse;
 import com.transfer.dto.MapLocationResponse;
 import com.transfer.dto.ResponderResponse;
 import com.transfer.dto.SupportDecisionRequest;
+import com.transfer.dto.UpdateVehicleLocationRequest;
+import com.transfer.dto.VehicleEtaResponse;
+import com.transfer.dto.VehicleTrackResponse;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
 import com.transfer.enums.UserRole;
+import com.transfer.enums.VehicleStatus;
+import com.transfer.enums.VehicleType;
 import com.transfer.model.DispatchTask;
+import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
 import com.transfer.service.CommandCenterService;
+import com.transfer.service.EmergencyVehicleDispatchService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,14 +41,19 @@ import java.util.List;
 @RequestMapping("/api/v1/command-center")
 public class CommandCenterController {
 
-    private final CommandCenterService
-            commandCenterService;
+    private final CommandCenterService commandCenterService;
+
+    private final EmergencyVehicleDispatchService
+            emergencyVehicleDispatchService;
 
     public CommandCenterController(
-            CommandCenterService commandCenterService
+            CommandCenterService commandCenterService,
+            EmergencyVehicleDispatchService emergencyVehicleDispatchService
     ) {
         this.commandCenterService =
                 commandCenterService;
+        this.emergencyVehicleDispatchService =
+                emergencyVehicleDispatchService;
     }
 
     /**
@@ -152,7 +165,7 @@ public class CommandCenterController {
     }
 
     /**
-     * FR-19：调度处理。
+     * FR-19：原有调度处理。
      */
     @PostMapping(
             "/incidents/{incidentId}/dispatch"
@@ -208,5 +221,116 @@ public class CommandCenterController {
     ) {
         return commandCenterService
                 .findResponders(role);
+    }
+
+    /**
+     * 查询救护车、清障车车辆库。
+     *
+     * 示例：
+     * /vehicles
+     * /vehicles?vehicleType=AMBULANCE
+     * /vehicles?vehicleType=CLEARANCE_TRUCK&status=AVAILABLE
+     */
+    @GetMapping("/vehicles")
+    public List<EmergencyVehicle> findVehicles(
+            @RequestParam(required = false)
+            VehicleType vehicleType,
+
+            @RequestParam(required = false)
+            VehicleStatus status
+    ) {
+        return emergencyVehicleDispatchService
+                .findVehicles(
+                        vehicleType,
+                        status
+                );
+    }
+
+    /**
+     * 指挥中心点击某个事故后，查询某类车辆到达时间。
+     *
+     * 示例：
+     * /incidents/1/vehicle-etas?vehicleType=AMBULANCE
+     * /incidents/1/vehicle-etas?vehicleType=CLEARANCE_TRUCK
+     */
+    @GetMapping(
+            "/incidents/{incidentId}/vehicle-etas"
+    )
+    public List<VehicleEtaResponse> estimateVehicleEtas(
+            @PathVariable
+            Long incidentId,
+
+            @RequestParam
+            VehicleType vehicleType
+    ) {
+        return emergencyVehicleDispatchService
+                .estimateForIncident(
+                        incidentId,
+                        vehicleType
+                );
+    }
+
+    /**
+     * 调度救护车/清障车。
+     *
+     * vehicleId 不传时，后端自动选择最快到达车辆。
+     */
+    @PostMapping(
+            "/incidents/{incidentId}/vehicle-dispatch"
+    )
+    public ResponseEntity<DispatchTask> dispatchVehicle(
+            @PathVariable
+            Long incidentId,
+
+            @Valid
+            @RequestBody
+            DispatchVehicleRequest request
+    ) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(
+                        emergencyVehicleDispatchService
+                                .dispatchVehicle(
+                                        incidentId,
+                                        request
+                                )
+                );
+    }
+
+    /**
+     * 查询调度车辆实时轨迹。
+     *
+     * 前端可以每隔 1～3 秒请求一次这个接口。
+     */
+    @GetMapping(
+            "/dispatch-tasks/{taskId}/vehicle-track"
+    )
+    public VehicleTrackResponse findVehicleTrack(
+            @PathVariable
+            Long taskId
+    ) {
+        return emergencyVehicleDispatchService
+                .findVehicleTrack(taskId);
+    }
+
+    /**
+     * 更新车辆真实 GPS 位置。
+     *
+     * 后续如果你同伴有 GPS 模拟器，可以调这个接口实时上报车辆位置。
+     */
+    @PutMapping("/vehicles/{vehicleId}/location")
+    public EmergencyVehicle updateVehicleLocation(
+            @PathVariable
+            Long vehicleId,
+
+            @Valid
+            @RequestBody
+            UpdateVehicleLocationRequest request
+    ) {
+        return emergencyVehicleDispatchService
+                .updateVehicleLocation(
+                        vehicleId,
+                        request
+                );
     }
 }
