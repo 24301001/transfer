@@ -96,6 +96,8 @@ function transformTask(task) {
       name: task.locationName || '',
       road: '',
       area: '',
+      lng: task.longitude || task.baiduLongitude || null,
+      lat: task.latitude || task.baiduLatitude || null,
     },
     status: mapTaskStatus(task.status),
     taskType: task.taskType,
@@ -139,6 +141,7 @@ export async function getDispatchList(params) {
 
 /**
  * 调度任务详情 — 后端暂无 GET /{id} 接口，从列表过滤
+ * 补全关联事故的坐标信息用于地图显示
  * @param {number} id
  */
 export async function getDispatchDetail(id) {
@@ -151,9 +154,30 @@ export async function getDispatchDetail(id) {
     console.warn('[dispatch] 任务 #' + id + ' 未找到')
     return { code: 404, data: null }
   }
+
+  const detail = transformTask(task)
+
+  // 补全关联事故的坐标用于地图显示
+  if (task.incidentId) {
+    try {
+      const incRes = await request.get(`/v1/incidents/${task.incidentId}`)
+      const inc = incRes.data?.incident || incRes.data
+      if (inc) {
+        // 优先使用后端缓存的百度坐标，其次使用原始坐标
+        detail.location.lng = inc.baiduLongitude || inc.longitude || detail.location.lng
+        detail.location.lat = inc.baiduLatitude || inc.latitude || detail.location.lat
+        detail.location.name = inc.mapFormattedAddress || inc.locationName || detail.location.name
+        detail.caseNo = inc.incidentNo || detail.caseNo
+        detail.accidentType = inc.confirmedAccidentType || inc.initialAccidentType || detail.accidentType
+      }
+    } catch (e) {
+      console.warn('[dispatch] 无法获取关联事故详情:', e.message)
+    }
+  }
+
   return {
     code: 200,
-    data: transformTask(task),
+    data: detail,
   }
 }
 

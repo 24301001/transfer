@@ -67,7 +67,7 @@
           <MapCard
             :height="'400px'"
             title="指挥大屏地图"
-            hint="事故点位分布示意（红线为风险等级）"
+            :hint="mapMarkers.length + ' 起事故'"
             :markers="mapMarkers"
           />
         </div>
@@ -223,6 +223,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccidentStore } from '@/stores/accident'
 import { getAccidentList } from '@/services/modules/accident'
+import { wgs84ToBd09 } from '@/utils/location'
 import MapCard from '@/components/MapCard.vue'
 import RiskBadge from '@/components/RiskBadge.vue'
 import {
@@ -259,16 +260,20 @@ const highRiskAccidents = computed(() =>
   accidentStore.accidentList.filter((a) => a.riskLevel === '高' || a.riskLevel === '严重')
 )
 
-// 地图标记
+// 地图标记 — 使用事故真实坐标（WGS84 → BD09）
 const mapMarkers = computed(() =>
-  accidentStore.accidentList.slice(0, 20).map((a, idx) => ({
-    x: 15 + (idx * 3.5) % 70,
-    y: 15 + (idx * 5.7) % 70,
-    label: a.type,
-    count: a.riskLevel === '严重' ? '!' : '',
-    type: a.riskLevel === '严重' ? 'danger' : a.riskLevel === '高' ? 'warning' : 'primary',
-    color: a.riskLevel === '严重' ? '#ef4444' : a.riskLevel === '高' ? '#f97316' : '#3b82f6',
-  }))
+  accidentStore.accidentList
+    .filter((a) => a.location?.lng && a.location?.lat)
+    .slice(0, 50)
+    .map((a) => {
+      const bd09 = wgs84ToBd09(a.location.lng, a.location.lat)
+      return {
+        lng: bd09.lng,
+        lat: bd09.lat,
+        label: a.type,
+        color: a.riskLevel === '严重' ? '#ef4444' : a.riskLevel === '高' ? '#f97316' : a.riskLevel === '中' ? '#eab308' : '#3b82f6',
+      }
+    })
 )
 
 function statusType(status) {

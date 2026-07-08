@@ -15,7 +15,6 @@
         <!-- 现场视频 -->
         <el-form-item label="现场视频">
           <div class="video-recorder">
-            <!-- 未录制且没有视频 -->
             <div v-if="!videoBlob && !recording" class="video-placeholder">
               <el-icon :size="48"><VideoCamera /></el-icon>
               <p>录制现场视频</p>
@@ -24,7 +23,6 @@
               </el-button>
             </div>
 
-            <!-- 录制中 -->
             <div v-if="recording" class="video-recording">
               <div class="recording-indicator">
                 <span class="rec-dot"></span>
@@ -46,7 +44,6 @@
               </el-button>
             </div>
 
-            <!-- 录制完成预览 -->
             <div v-if="videoBlob && !recording" class="video-preview">
               <video
                 ref="videoRef"
@@ -66,7 +63,6 @@
               </div>
             </div>
 
-            <!-- 隐藏的实时预览画面（录制时不可见，作为摄像头 feed） -->
             <video
               ref="cameraRef"
               style="display:none;"
@@ -77,7 +73,7 @@
         </el-form-item>
 
         <!-- 事故地点 -->
-        <el-form-item label="事故地点" prop="location">
+        <el-form-item label="事故地点" prop="locationStr">
           <div class="location-picker">
             <el-select
               v-model="form.locationPreset"
@@ -103,24 +99,40 @@
               v-model="form.customLocation"
               placeholder="或手动输入详细位置"
               class="location-input"
+              @input="onCustomLocationInput"
             />
             <el-button @click="handleAutoLocate" :loading="locating" type="default">
               <el-icon><Aim /></el-icon>
               自动定位
             </el-button>
           </div>
+
+          <!-- 位置已选提示 -->
           <div v-if="form.locationStr" class="location-result">
             <el-icon><LocationFilled /></el-icon>
+            <span class="loc-coords" v-if="form.locationLat">
+              {{ form.locationLat.toFixed(4) }}, {{ form.locationLng.toFixed(4) }}
+            </span>
             {{ form.locationStr }}
           </div>
-          <!-- 地图占位 -->
-          <MapCard
-            v-if="form.locationStr"
-            :height="'180px'"
-            :title="form.locationStr"
-            hint="点击放大地图"
-            :markers="mapMarkers"
-          />
+
+          <!-- 百度地图（选取模式） -->
+          <div class="report-map-wrapper">
+            <MapCard
+              ref="mapCardRef"
+              :height="'280px'"
+              picker-mode
+              :markers="mapMarkers"
+              :center="mapCenter"
+              :zoom="15"
+              @location-select="onMapLocationSelect"
+              @location-confirm="onMapLocationConfirm"
+            />
+            <p class="map-tip" v-if="!form.locationStr">
+              <el-icon><InfoFilled /></el-icon>
+              点击地图上的位置选择事故地点，或使用「自动定位」按钮
+            </p>
+          </div>
         </el-form-item>
 
         <!-- 事故类型 -->
@@ -339,9 +351,13 @@ import { ref, reactive, computed } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
 import { addAccident as apiAddAccident, getAccidentDetail } from '@/services/modules/accident'
-import { PRESET_LOCATIONS, mockGetCurrentLocation } from '@/utils/location'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, Aim, LocationFilled, Loading, View, Collection, WarningFilled, ChatLineSquare, VideoCamera, VideoPause, Delete } from '@element-plus/icons-vue'
+import { reverseGeocode } from '@/services/modules/map'
+import { PRESET_LOCATIONS, getPresetCoords, getRealCurrentPosition, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
+import { ElMessage } from 'element-plus'
+import {
+  Upload, Aim, LocationFilled, Loading, View, Collection,
+  WarningFilled, ChatLineSquare, VideoCamera, VideoPause, Delete, InfoFilled,
+} from '@element-plus/icons-vue'
 import PhotoUploader from '@/components/PhotoUploader.vue'
 import MapCard from '@/components/MapCard.vue'
 import RiskBadge from '@/components/RiskBadge.vue'
@@ -349,6 +365,7 @@ import RiskBadge from '@/components/RiskBadge.vue'
 const userStore = useUserStore()
 const accidentStore = useAccidentStore()
 const formRef = ref(null)
+const mapCardRef = ref(null)
 const submitting = ref(false)
 const locating = ref(false)
 const resultVisible = ref(false)
@@ -356,7 +373,10 @@ const adviceVisible = ref(false)
 const result = ref(null)
 const lastSubmission = ref(null)
 
-// 事故类型预设选项
+// 地图中心（BD09 坐标系，用于传递给 MapCard）
+const mapCenter = ref(null)
+
+// 事故类型预设
 const ACCIDENT_TYPE_OPTIONS = [
   '追尾事故', '正面碰撞', '侧面刮擦', '车辆侧翻',
   '撞固定物', '车辆自燃', '货物散落', '其他',
@@ -387,7 +407,6 @@ function formatSize(bytes) {
 
 async function startRecording() {
   try {
-    // 清除上一次录制的视频
     if (videoUrl.value) {
       URL.revokeObjectURL(videoUrl.value)
       videoUrl.value = ''
@@ -399,12 +418,10 @@ async function startRecording() {
       audio: true,
     })
 
-    // 显示摄像头画面到隐藏的 video 元素
     if (cameraRef.value) {
       cameraRef.value.srcObject = mediaStream
     }
 
-    // 创建 MediaRecorder
     const chunks = []
     mediaRecorder = new MediaRecorder(mediaStream, {
       mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
@@ -422,7 +439,6 @@ async function startRecording() {
       const blob = new Blob(chunks, { type: 'video/webm' })
       videoBlob.value = blob
       videoUrl.value = URL.createObjectURL(blob)
-      // 释放摄像头
       if (mediaStream) {
         mediaStream.getTracks().forEach((t) => t.stop())
         mediaStream = null
@@ -433,7 +449,6 @@ async function startRecording() {
       ElMessage.success('视频录制完成')
     }
 
-    // 开始录制，20秒后自动停止
     recordElapsed.value = 0
     recording.value = true
     mediaRecorder.start()
@@ -470,59 +485,166 @@ function removeVideo() {
   videoRef.value = null
 }
 
+// ====== 表单数据 ======
 const form = reactive({
   images: [],
   video: null,
   locationPreset: null,
   customLocation: '',
   locationStr: '',
-  location: null,
+  locationName: '',   // 地点名称
+  locationLat: null,  // WGS84 纬度
+  locationLng: null,  // WGS84 经度
   accidentType: '',
   description: '',
 })
 
 const rules = {
   images: [{ required: true, message: '请上传至少一张事故照片', trigger: 'change' }],
-  locationStr: [{ required: true, message: '请选择或输入事故地点', trigger: 'change' }],
+  locationStr: [{ required: true, message: '请在地图上选择事故地点', trigger: 'change' }],
   description: [{ required: true, message: '请输入事故描述', trigger: 'blur' }],
   accidentType: [{ required: false }],
 }
 
+/** 地图标记 — 给 MapCard 传递 BD09 坐标（百度地图使用） */
 const mapMarkers = computed(() => {
-  if (!form.location) return null
-  return [{ x: 50, y: 50, label: form.locationStr, type: 'danger' }]
+  if (!form.locationLat || !form.locationLng) return null
+  // 将表单中存的 WGS84 转为 BD09 在地图上显示
+  const bd09 = wgs84ToBd09(form.locationLng, form.locationLat)
+  return [{
+    lng: bd09.lng,
+    lat: bd09.lat,
+    label: form.locationStr,
+  }]
 })
 
+// ====== 预设地点选择 ======
 function onPresetChange(val) {
   if (val) {
     const loc = PRESET_LOCATIONS.find((l) => l.id === val)
+    const coords = getPresetCoords(val)
     if (loc) {
       form.locationStr = loc.name
-      form.location = { name: loc.name, road: loc.road, area: loc.area, lat: 31.2 + Math.random() * 0.3, lng: 121.4 + Math.random() * 0.3 }
-      form.customLocation = ''
+      form.locationName = loc.name
+      form.customLocation = loc.name
+      if (coords) {
+        form.locationLat = coords.lat
+        form.locationLng = coords.lng
+        // 设置地图中心（需转换为 BD09 显示）
+        setMapCenterToWgs84(coords.lng, coords.lat)
+      } else {
+        form.locationLat = null
+        form.locationLng = null
+        mapCenter.value = null
+      }
     }
   } else {
-    form.locationStr = form.customLocation
-    form.location = form.customLocation ? { name: form.customLocation, road: '', area: '', lat: 0, lng: 0 } : null
+    clearLocation()
   }
 }
 
+/** 手动输入地址 */
+function onCustomLocationInput(val) {
+  if (val && !form.locationPreset) {
+    form.locationStr = val
+    form.locationName = val
+    // 不自动清除坐标，用户可能已在地图上选了点
+  }
+}
+
+// ====== 地图位置选取 ======
+/** 用户在地图上点击选位时触发（坐标来自百度地图，为 BD09） */
+function onMapLocationSelect(data) {
+  // data 包含 BD09 的 lng, lat 和地址信息
+  // 转换 BD09 → WGS84 用于后端存储
+  const wgs84 = bd09ToWgs84(data.lng, data.lat)
+
+  form.locationLat = wgs84.lat
+  form.locationLng = wgs84.lng
+  form.locationName = data.address || data.formattedAddress || form.customLocation || '地图选点'
+  form.locationStr = data.formattedAddress || data.address || data.semanticDescription || `${wgs84.lat.toFixed(4)}, ${wgs84.lng.toFixed(4)}`
+  form.locationPreset = null
+
+  // 地图中心自动跟随选择点（MapCard 已 panTo）
+}
+
+/** 用户点击「确认」按钮 */
+function onMapLocationConfirm(data) {
+  // 同 onMapLocationSelect 逻辑
+  if (data) {
+    const wgs84 = bd09ToWgs84(data.lng, data.lat)
+    form.locationLat = wgs84.lat
+    form.locationLng = wgs84.lng
+    form.locationName = data.address || form.locationName
+    form.locationStr = data.address || form.locationStr
+  }
+  ElMessage.success(`已选择位置: ${form.locationStr}`)
+}
+
+// ====== 自动定位 ======
 async function handleAutoLocate() {
   locating.value = true
   try {
-    const loc = await mockGetCurrentLocation()
-    form.locationStr = loc.address
-    form.location = { name: loc.address, road: '', area: '', lat: loc.lat, lng: loc.lng }
+    // 优先使用真实 GPS
+    let coords
+    try {
+      coords = await getRealCurrentPosition()
+    } catch (gpsErr) {
+      console.warn('[ReportAccident] GPS 定位失败，使用降级方案:', gpsErr.message)
+      // 降级：提示用户在地图上点击选择
+      ElMessage.warning('GPS 定位失败，请点击地图选择位置')
+      locating.value = false
+      return
+    }
+
+    const { lat, lng } = coords // WGS84
+
+    // 反向地理编码获取地址
+    let addressText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+    try {
+      const loc = await reverseGeocode(lng, lat, 'WGS84')
+      addressText = loc.formattedAddress || loc.semanticDescription || addressText
+    } catch {
+      // 地址解析失败不影响定位
+    }
+
+    // 更新表单
+    form.locationLat = lat
+    form.locationLng = lng
+    form.locationName = addressText
+    form.locationStr = addressText
+    form.customLocation = addressText
     form.locationPreset = null
-    form.customLocation = loc.address
+
+    // 设置地图中心（WGS84 → MapCard 需要 BD09）
+    setMapCenterToWgs84(lng, lat)
+
     ElMessage.success('定位成功')
-  } catch {
-    ElMessage.error('定位失败，请手动输入')
+  } catch (err) {
+    ElMessage.error(err.message || '定位失败')
   } finally {
     locating.value = false
   }
 }
 
+/**
+ * 将 WGS84 坐标转换为 BD09 并设为地图中心
+ */
+async function setMapCenterToWgs84(lng, lat) {
+  const bd09 = wgs84ToBd09(lng, lat)
+  mapCenter.value = { lng: bd09.lng, lat: bd09.lat }
+}
+
+function clearLocation() {
+  form.locationStr = ''
+  form.locationName = ''
+  form.locationLat = null
+  form.locationLng = null
+  form.locationPreset = null
+  mapCenter.value = null
+}
+
+// ====== 提交 ======
 async function handleSubmit() {
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
@@ -533,11 +655,19 @@ async function handleSubmit() {
     const res = await apiAddAccident({
       images: form.images.map((img) => ({ name: img.name, url: img.url })),
       video: videoBlob.value ? { name: '现场视频.webm', size: videoBlob.value.size } : null,
-      location: form.location,
+      location: {
+        name: form.locationName || form.locationStr,
+        area: form.customLocation || form.locationName,
+        road: '',
+        lat: form.locationLat,
+        lng: form.locationLng,
+      },
       description: form.description,
       accidentType: form.accidentType || '',
       reporter: userStore.nickname,
       reporterId: userStore.userInfo?.id || 0,
+      // 告诉后端坐标类型为 WGS84
+      coordinateType: 'WGS84',
     })
 
     if (res.code === 200) {
@@ -545,11 +675,10 @@ async function handleSubmit() {
         id: res.data.id,
         caseNo: res.data.caseNo,
         reportTime: new Date().toLocaleString('zh-CN'),
-        location: form.location,
+        location: form.locationName,
       }
       ElMessage.success('事故提交成功！系统正在分析识别...')
 
-      // 显示结果弹窗，模拟等待识别完成
       resultVisible.value = true
       setTimeout(async () => {
         try {
@@ -586,15 +715,17 @@ async function handleSubmit() {
 }
 
 function handleReset() {
-  // 清除视频
   removeVideo()
   form.images = []
   form.locationPreset = null
   form.customLocation = ''
   form.locationStr = ''
-  form.location = null
+  form.locationName = ''
+  form.locationLat = null
+  form.locationLng = null
   form.accidentType = ''
   form.description = ''
+  mapCenter.value = null
   result.value = null
   resultVisible.value = false
   adviceVisible.value = false
@@ -652,6 +783,32 @@ function openAdviceDialog() {
   display: flex;
   align-items: center;
   gap: 6px;
+
+  .loc-coords {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    background: rgba(26, 86, 219, 0.1);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+}
+
+.report-map-wrapper {
+  margin-top: 10px;
+  position: relative;
+}
+
+.map-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: $text-light;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  .el-icon {
+    font-size: 14px;
+  }
 }
 
 .submit-btn {

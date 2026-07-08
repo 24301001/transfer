@@ -61,11 +61,14 @@
               <el-descriptions-item label="识别可信度">{{ accident.confidence }}</el-descriptions-item>
             </el-descriptions>
 
-            <!-- 地图占位 -->
+            <!-- 百度地图 -->
             <MapCard
               :height="'180px'"
               :title="accident.location?.name"
-              hint="地图接口预留"
+              hint="事故位置"
+              :markers="mapMarkers"
+              :center="mapCenter"
+              :zoom="15"
               style="margin-top:12px;"
             />
           </div>
@@ -151,10 +154,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { getAccidentDetail } from '@/services/modules/accident'
+import { wgs84ToBd09 } from '@/utils/location'
 import MapCard from '@/components/MapCard.vue'
 import RiskBadge from '@/components/RiskBadge.vue'
 import StatusTimeline from '@/components/StatusTimeline.vue'
@@ -172,6 +176,24 @@ const statusType = computed(() => {
   return map[accident.value?.status] || 'info'
 })
 
+/** 地图标记（BD09 坐标） */
+const mapMarkers = computed(() => {
+  if (!accident.value?.location?.lng || !accident.value?.location?.lat) return null
+  const bd09 = wgs84ToBd09(accident.value.location.lng, accident.value.location.lat)
+  return [{
+    lng: bd09.lng,
+    lat: bd09.lat,
+    label: accident.value.location?.name || '',
+  }]
+})
+
+/** 地图中心点（BD09） */
+const mapCenter = computed(() => {
+  if (!accident.value?.location?.lng || !accident.value?.location?.lat) return null
+  const bd09 = wgs84ToBd09(accident.value.location.lng, accident.value.location.lat)
+  return { lng: bd09.lng, lat: bd09.lat }
+})
+
 async function fetchDetail() {
   loading.value = true
   try {
@@ -185,7 +207,7 @@ async function fetchDetail() {
   }
 }
 
-fetchDetail()
+onMounted(fetchDetail)
 
 function goBack() {
   if (userStore.role === 'RESCUE') {
