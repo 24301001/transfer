@@ -57,25 +57,17 @@ public class CitizenAiService {
                 incident == null ? null : incident.getConfirmedAccidentType()
         );
 
-        if (!isInReportScope(question)) {
-            String reply = casualtyDetected
-                    ? "我只能协助事故上报和现场安全。有人受伤时请先拨打120，并在确保自身安全的前提下等待救援。"
-                    : "我只能协助事故上报、定位、照片/视频上传和现场安全。请按页面要求填写地点、事故描述并上传现场照片；如有人员受伤请先拨打120。";
-
-            return new CitizenAiChatResponse(
-                    reply,
-                    true,
-                    casualtyDetected,
-                    casualtyDetected,
-                    casualtyDetected ? EMERGENCY_PHONE : null
-            );
-        }
-
+        /*
+         * AI悬浮球是上报页内的开放式市民咨询入口：
+         * - 不再做事故上报范围拦截；
+         * - 不再因旅游、吃饭、代码等关键词返回 outOfScope=true；
+         * - 仍保留伤亡关键词检测字段，便于前端在必要时做安全提示。
+         */
         String aiReply = siliconFlowClient.chat(
                 citizenSystemPrompt(),
                 buildChatPrompt(question, locationName, description),
-                220,
-                0.2
+                700,
+                0.6
         );
 
         String reply = sanitizeAndLimit(
@@ -83,12 +75,12 @@ public class CitizenAiService {
                         aiReply,
                         fallbackChatReply(question, casualtyDetected)
                 ),
-                220
+                900
         );
 
         if (casualtyDetected && !reply.contains("120")) {
-            reply = "如有人受伤，请先拨打120。" + reply;
-            reply = sanitizeAndLimit(reply, 220);
+            reply = "如现场有人受伤、昏迷、流血或被困，请先拨打120。" + reply;
+            reply = sanitizeAndLimit(reply, 900);
         }
 
         return new CitizenAiChatResponse(
@@ -181,128 +173,12 @@ public class CitizenAiService {
         );
     }
 
-    private boolean isInReportScope(String question) {
-        String text = safe(question).toLowerCase(Locale.ROOT).trim();
-
-        if (text.isBlank()) {
-            return true;
-        }
-
-        /*
-         * 明确越界的问题必须直接拦截。
-         * 不能因为当前页面存在事故描述，就把“旅游/娱乐/股票”等问题错误判定为事故上报问题。
-         */
-        if (containsAny(
-                text,
-                "旅游",
-                "景点",
-                "去哪玩",
-                "吃饭",
-                "餐厅",
-                "酒店",
-                "电影",
-                "游戏",
-                "购物",
-                "股票",
-                "基金",
-                "彩票",
-                "作业",
-                "论文",
-                "代码",
-                "维修费",
-                "修车",
-                "赔偿",
-                "赔钱",
-                "定责",
-                "责任划分",
-                "罚款",
-                "扣分",
-                "保险理赔",
-                "医学诊断",
-                "用药",
-                "weather",
-                "travel",
-                "stock",
-                "movie",
-                "game"
-        )) {
-            return false;
-        }
-
-        if (containsAny(
-                text,
-                "事故",
-                "车祸",
-                "追尾",
-                "碰撞",
-                "撞",
-                "剐蹭",
-                "刮蹭",
-                "上报",
-                "提交",
-                "上传",
-                "照片",
-                "图片",
-                "视频",
-                "定位",
-                "位置",
-                "地点",
-                "地址",
-                "报警",
-                "120",
-                "110",
-                "122",
-                "交警",
-                "受伤",
-                "伤亡",
-                "流血",
-                "昏迷",
-                "被困",
-                "安全",
-                "三角牌",
-                "警示牌",
-                "救护",
-                "撤离",
-                "高速",
-                "车道",
-                "占道",
-                "堵车",
-                "拥堵",
-                "report",
-                "upload",
-                "location",
-                "accident",
-                "crash",
-                "photo",
-                "video"
-        )) {
-            return true;
-        }
-
-        /*
-         * 上报页面内常见的短问题。
-         * 只放页面操作相关语义，不再用“长度小于 12”兜底。
-         */
-        return containsAny(
-                text,
-                "怎么办",
-                "怎么做",
-                "怎么处理",
-                "怎么填",
-                "填什么",
-                "下一步",
-                "需要什么",
-                "不会填",
-                "不懂",
-                "可以吗",
-                "要不要"
-        );
-    }
-
     private String citizenSystemPrompt() {
-        return "你是交通事故上报页面内的市民辅助AI。只能回答事故上报、定位、照片/视频上传、现场安全、报警求助相关问题。"
-                + "不要回答法律定责、赔偿金额、医学诊断、维修报价、复杂交通调度和与事故无关的问题。"
-                + "回复必须中文、简短、安抚、可执行，不超过120字。有人受伤、昏迷、流血、被困时必须提示先拨打120。";
+        return "你是事故上报页面内的AI悬浮球，也是普通市民的通用咨询助手。"
+                + "用户可能会询问事故上报、定位、照片/视频上传、现场安全，也可能询问其他临时不懂的问题；请按用户问题正常回答，不要因为问题不属于事故上报就拒答。"
+                + "回答应使用中文，尽量清楚、直接、适合普通市民理解。"
+                + "涉及交通事故现场时，优先提醒用户确保自身安全；如果上下文出现受伤、昏迷、流血、被困、伤亡等情况，必须提示先拨打120。"
+                + "涉及法律、医疗、保险等专业问题时，可以给一般性说明，但不要冒充专业人员作最终判断。";
     }
 
     private String immediateAdviceSystemPrompt() {
@@ -318,9 +194,9 @@ public class CitizenAiService {
             String description
     ) {
         return "用户问题：" + safe(question)
-                + "\n事故地点：" + safeOrDefault(locationName, "未填写")
-                + "\n事故描述：" + safeOrDefault(description, "未填写")
-                + "\n请只给事故上报页面内可执行的简短帮助。";
+                + "\n页面上下文-事故地点：" + safeOrDefault(locationName, "未填写")
+                + "\n页面上下文-事故描述：" + safeOrDefault(description, "未填写")
+                + "\n请根据用户问题直接回答。若问题与事故现场有关，请结合页面上下文给出安全、可执行的建议；若问题与事故无关，也不要拒答。";
     }
 
     private String buildImmediateAdvicePrompt(
@@ -375,7 +251,7 @@ public class CitizenAiService {
             return "请优先上传能看清事故车辆、车道占用和现场环境的照片；视频为可选，确保安全后再录制。";
         }
 
-        return "请先确保安全，再填写事故地点、事故描述、事故类型并上传照片；如有人受伤，请先拨打120。";
+        return "当前AI服务未配置或暂时不可用。我可以先协助你完成事故上报：确认定位、填写事故描述、上传现场照片；其他问题请稍后再试。";
     }
 
     private String sanitizeAndLimit(
