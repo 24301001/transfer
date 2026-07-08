@@ -31,7 +31,7 @@ public class SystemData extends AuditableEntity {
     /**
      * 用于保存道路等级、风险阈值、事故类型扩展参数等结构化或半结构化配置。
      */
-    @Column(length = 2000)
+    @Column(name = "config_value", length = 2000)
     private String value;
 
     @Column(length = 1000)

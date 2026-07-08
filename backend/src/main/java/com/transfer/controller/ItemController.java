@@ -7,9 +7,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+
 
 @RestController
 @RequestMapping("/api")
@@ -21,14 +20,6 @@ public class ItemController {
         this.itemService = itemService;
     }
 
-    // 健康检查
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        Map<String, String> response = new HashMap<>();
-        response.put("status", "UP");
-        response.put("message", "Service is running");
-        return ResponseEntity.ok(response);
-    }
 
     // 获取所有项目
     @GetMapping("/items")
