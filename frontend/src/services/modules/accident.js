@@ -198,6 +198,7 @@ export async function addAccident(data) {
     roadName: data.location?.road || '',
     longitude: data.location?.lng,
     latitude: data.location?.lat,
+    coordinateType: data.coordinateType || null,
     initialAccidentType: data.accidentType || '',
     description: data.description || '',
     reportUserId: data.reporterId || null,

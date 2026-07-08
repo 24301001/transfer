@@ -44,6 +44,9 @@
               :height="'200px'"
               :title="task.location?.name"
               hint="点击查看导航"
+              :markers="mapMarkers"
+              :center="mapCenter"
+              :zoom="15"
               style="margin-top:12px;"
             />
 
@@ -171,6 +174,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDispatchStore } from '@/stores/dispatch'
 import { getDispatchDetail, updateDispatchStatus } from '@/services/modules/dispatch'
+import { wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, LocationFilled, Van, Tools, CircleCheck } from '@element-plus/icons-vue'
 import MapCard from '@/components/MapCard.vue'
@@ -194,6 +198,24 @@ const statusType = computed(() => {
 const stepIndex = computed(() => {
   const map = { 待接收: 0, 已出发: 1, 已到达: 2, 处理中: 3, 已完成: 4 }
   return map[task.value?.status] ?? 0
+})
+
+/** 地图标记（BD09 坐标） */
+const mapMarkers = computed(() => {
+  if (!task.value?.location?.lng || !task.value?.location?.lat) return null
+  const bd09 = wgs84ToBd09(task.value.location.lng, task.value.location.lat)
+  return [{
+    lng: bd09.lng,
+    lat: bd09.lat,
+    label: task.value.location?.name || '',
+  }]
+})
+
+/** 地图中心 */
+const mapCenter = computed(() => {
+  if (!task.value?.location?.lng || !task.value?.location?.lat) return null
+  const bd09 = wgs84ToBd09(task.value.location.lng, task.value.location.lat)
+  return { lng: bd09.lng, lat: bd09.lat }
 })
 
 async function fetchDetail() {

@@ -1,96 +1,412 @@
 <template>
-  <div class="map-card" :style="{ height }" @click="handleClick">
-    <div class="map-placeholder">
-      <div class="map-grid">
-        <div v-for="i in 9" :key="i" class="grid-cell"></div>
+  <div
+    class="baidu-map-card"
+    :style="{ height, width }"
+    :class="{ 'is-picker': pickerMode, 'is-loaded': mapLoaded }"
+  >
+    <!-- 地图容器 -->
+    <div ref="mapContainer" class="map-container"></div>
+
+    <!-- 加载中 / 占位 -->
+    <div v-if="!mapLoaded && !loadError" class="map-overlay">
+      <div class="map-placeholder">
+        <el-icon :size="48" color="#93c5fd"><MapLocation /></el-icon>
+        <p>{{ title || '地图加载中…' }}</p>
+        <span class="map-hint">{{ hint || '正在加载百度地图…' }}</span>
       </div>
-      <div class="map-overlay">
-        <div v-if="markers && markers.length" class="map-markers">
-          <div
-            v-for="(m, idx) in markers"
-            :key="idx"
-            class="map-marker"
-            :style="{ left: m.x + '%', top: m.y + '%' }"
-            :title="m.label"
-          >
-            <el-badge :value="m.count || ''" :hidden="!m.count" :type="m.type || 'danger'">
-              <el-icon :size="m.size || 28" :color="m.color || '#ef4444'">
-                <LocationFilled />
-              </el-icon>
-            </el-badge>
-          </div>
-        </div>
-        <div v-else class="map-empty">
-          <el-icon :size="48" color="#93c5fd"><MapLocation /></el-icon>
-          <p>{{ title || '地图区域' }}</p>
-          <span class="map-hint">{{ hint || '地图接口预留·占位展示' }}</span>
-        </div>
+    </div>
+
+    <!-- 加载失败 -->
+    <div v-if="loadError" class="map-overlay map-error-overlay">
+      <div class="map-placeholder">
+        <el-icon :size="48" color="#ef4444"><WarningFilled /></el-icon>
+        <p>地图加载失败</p>
+        <span class="map-hint">{{ loadErrorMessage }}</span>
+        <el-button size="small" style="margin-top:8px" @click="initMap">重新加载</el-button>
       </div>
+    </div>
+
+    <!-- 位置已选择标签（picker 模式） -->
+    <div v-if="pickerMode && selectedAddress && mapLoaded" class="picker-location-tag">
+      <el-icon><LocationFilled /></el-icon>
+      <span class="tag-text">{{ selectedAddress }}</span>
+      <el-button
+        v-if="selectedLng || selectedLat"
+        size="small"
+        text
+        type="primary"
+        @click="confirmLocation"
+      >确认</el-button>
+    </div>
+
+    <!-- 地图控件（非 picker 模式） -->
+    <div v-if="!pickerMode && mapLoaded" class="map-controls">
+      <el-button-group>
+        <el-button size="small" @click="zoomIn">
+          <el-icon><Plus /></el-icon>
+        </el-button>
+        <el-button size="small" @click="zoomOut">
+          <el-icon><Minus /></el-icon>
+        </el-button>
+      </el-button-group>
+    </div>
+
+    <!-- 遮罩提示（展示模式，提示可点击） -->
+    <div v-if="!pickerMode && !loadError" class="map-click-hint" @click="handleCardClick">
+      <span class="hint-text">{{ hint || '点击查看地图' }}</span>
     </div>
   </div>
 </template>
 
 <script setup>
-import { LocationFilled, MapLocation } from '@element-plus/icons-vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { loadBaiduMap } from '@/utils/baiduMapLoader'
+import { convertCoordinate, reverseGeocode } from '@/services/modules/map'
+import { ElMessage } from 'element-plus'
+import { MapLocation, LocationFilled, WarningFilled, Plus, Minus } from '@element-plus/icons-vue'
 
-defineProps({
+const props = defineProps({
   title: { type: String, default: '' },
   hint: { type: String, default: '' },
   height: { type: String, default: '300px' },
+  width: { type: String, default: '100%' },
+  /** 标记点数组。
+   *  新格式（真实坐标）：[{ lng, lat, label?, color?, type?, count? }]
+   *  兼容旧格式（百分比占位，不在地图上显示）：[{ x, y, label, ... }]
+   */
   markers: { type: Array, default: null },
+  /** 地图中心点（BD09 坐标系） */
+  center: { type: Object, default: null },
+  /** 缩放级别 3-21，默认 14 */
+  zoom: { type: Number, default: 14 },
+  /** 是否开启地点选取模式（点击地图选取位置，带拖拽标记） */
+  pickerMode: { type: Boolean, default: false },
+  /** 百度地图 AK，不传则使用默认配置 */
+  ak: { type: String, default: '' },
+  /** 标记物坐标系类型，用于将标记坐标转换为 BD09 显示 */
+  markerCoordType: { type: String, default: 'WGS84' },
 })
 
-const emit = defineEmits(['click'])
+const emit = defineEmits([
+  'click',
+  'update:center',
+  /** picker 模式下选中位置时触发 { lng, lat, address, formattedAddress } */
+  'location-select',
+  /** 已确认位置 */
+  'location-confirm',
+  /** 地图加载完成 */
+  'map-ready',
+])
 
-function handleClick() {
+// ====== 地图实例 ======
+const mapContainer = ref(null)
+let mapInstance = null
+let markerInstance = null
+let overlayMarkers = [] // 批量标记
+
+// ====== 状态 ======
+const mapLoaded = ref(false)
+const loadError = ref(false)
+const loadErrorMessage = ref('')
+const selectedLng = ref(null)
+const selectedLat = ref(null)
+const selectedAddress = ref('')
+
+// ====== 初始化地图 ======
+async function initMap() {
+  if (!mapContainer.value) return
+
+  loadError.value = false
+  loadErrorMessage.value = ''
+  mapLoaded.value = false
+
+  try {
+    const BMapGL = await loadBaiduMap(props.ak || undefined)
+    await nextTick()
+    if (!mapContainer.value) return // 组件已卸载
+
+    // 创建地图
+    mapInstance = new BMapGL.Map(mapContainer.value)
+
+    // 启用鼠标滚轮缩放
+    mapInstance.enableScrollWheelZoom(true)
+
+    // 默认中心（上海市中心）
+    const defaultCenter = new BMapGL.Point(121.4737, 31.2304)
+    let centerLng = 121.4737
+    let centerLat = 31.2304
+
+    // 如果有 markers 且包含真实坐标，自动适配到第一个标记
+    if (props.markers && props.markers.length > 0) {
+      const realMarker = props.markers.find((m) => m.lng !== undefined && m.lat !== undefined)
+      if (realMarker) {
+        centerLng = realMarker.lng
+        centerLat = realMarker.lat
+      }
+    }
+
+    // center prop 覆盖
+    if (props.center && props.center.lng !== undefined) {
+      centerLng = props.center.lng
+      centerLat = props.center.lat
+    }
+
+    const centerPoint = new BMapGL.Point(centerLng, centerLat)
+    mapInstance.centerAndZoom(centerPoint, props.zoom)
+
+    // 控件
+    mapInstance.addControl(new BMapGL.ScaleControl())
+    mapInstance.addControl(new BMapGL.ZoomControl())
+
+    // 设置点击事件（picker 模式）
+    if (props.pickerMode) {
+      mapInstance.addEventListener('click', onMapClick)
+    }
+
+    mapLoaded.value = true
+    emit('map-ready', mapInstance)
+
+    // 异步渲染标记
+    await nextTick()
+    renderMarkers()
+
+  } catch (err) {
+    console.error('[MapCard] 地图初始化失败:', err)
+    loadError.value = true
+    loadErrorMessage.value = err.message || '请检查网络连接或 API Key'
+  }
+}
+
+// ====== 地图点击（picker 模式） ======
+let reverseGeocodeTimer = null
+
+async function onMapClick(e) {
+  if (!mapInstance || !props.pickerMode) return
+
+  const point = e.latlng || e.point
+  if (!point) return
+
+  const lng = point.lng
+  const lat = point.lat
+
+  // 更新标记
+  setPickerMarker(lng, lat)
+
+  // 逆地理编码（防抖）
+  if (reverseGeocodeTimer) clearTimeout(reverseGeocodeTimer)
+  reverseGeocodeTimer = setTimeout(async () => {
+    try {
+      // BD09 → 后端逆地理
+      const loc = await reverseGeocode(lng, lat, 'BD09')
+      selectedAddress.value = loc.formattedAddress || `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+      emit('location-select', {
+        lng,
+        lat,
+        address: selectedAddress.value,
+        formattedAddress: loc.formattedAddress,
+        semanticDescription: loc.semanticDescription,
+        province: loc.province,
+        city: loc.city,
+        district: loc.district,
+        street: loc.street,
+      })
+    } catch {
+      selectedAddress.value = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+      emit('location-select', { lng, lat, address: selectedAddress.value })
+    }
+  }, 300)
+}
+
+/** 设置 picker 标记 */
+function setPickerMarker(lng, lat) {
+  if (!mapInstance) return
+  const BMapGL = window.BMapGL
+  if (!BMapGL) return
+
+  // 移除旧标记
+  if (markerInstance) {
+    mapInstance.removeOverlay(markerInstance)
+  }
+
+  const point = new BMapGL.Point(lng, lat)
+  markerInstance = new BMapGL.Marker(point, { enableDragging: true })
+  mapInstance.addOverlay(markerInstance)
+
+  // 拖拽事件
+  markerInstance.addEventListener('dragend', (e) => {
+    const pt = e.point || e.latlng
+    if (pt) {
+      selectedLng.value = pt.lng
+      selectedLat.value = pt.lat
+      // 触发逆地理
+      onMapClick({ latlng: pt })
+    }
+  })
+
+  selectedLng.value = lng
+  selectedLat.value = lat
+
+  // 动画移动
+  mapInstance.panTo(point)
+}
+
+function confirmLocation() {
+  if (selectedLng.value && selectedLat.value) {
+    emit('location-confirm', {
+      lng: selectedLng.value,
+      lat: selectedLat.value,
+      address: selectedAddress.value,
+    })
+  }
+}
+
+// ====== 渲染标记 ======
+function renderMarkers() {
+  if (!mapInstance || !props.markers) return
+  const BMapGL = window.BMapGL
+  if (!BMapGL) return
+
+  // 清除旧标记
+  clearOverlays()
+
+  const realMarkers = props.markers.filter((m) => m.lng !== undefined && m.lat !== undefined)
+  if (realMarkers.length === 0) return
+
+  // 添加新标记
+  realMarkers.forEach((m) => {
+    const point = new BMapGL.Point(m.lng, m.lat)
+    const marker = new BMapGL.Marker(point)
+    mapInstance.addOverlay(marker)
+    overlayMarkers.push(marker)
+
+    // 信息窗口
+    if (m.label) {
+      const label = new BMapGL.Label(m.label, {
+        position: point,
+        offset: new BMapGL.Size(10, -25),
+      })
+      label.setStyle({
+        color: '#333',
+        fontSize: '12px',
+        padding: '4px 8px',
+        border: '1px solid #d1d5db',
+        borderRadius: '4px',
+        background: '#fff',
+        whiteSpace: 'nowrap',
+      })
+      mapInstance.addOverlay(label)
+      overlayMarkers.push(label)
+    }
+
+    if (m.onClick) {
+      marker.addEventListener('click', m.onClick)
+    }
+  })
+
+  // 适配到所有标记
+  if (realMarkers.length > 0 && !props.center) {
+    const points = realMarkers.map((m) => new BMapGL.Point(m.lng, m.lat))
+    const viewport = mapInstance.getViewport(points)
+    mapInstance.centerAndZoom(viewport.center, viewport.zoom)
+  }
+}
+
+function clearOverlays() {
+  if (!mapInstance) return
+  overlayMarkers.forEach((m) => mapInstance.removeOverlay(m))
+  overlayMarkers = []
+}
+
+// ====== 缩放 ======
+function zoomIn() {
+  if (mapInstance) mapInstance.zoomIn()
+}
+function zoomOut() {
+  if (mapInstance) mapInstance.zoomOut()
+}
+
+// ====== 卡片点击 ======
+function handleCardClick() {
   emit('click')
 }
+
+// ====== 生命周期 ======
+onMounted(() => {
+  initMap()
+})
+
+onBeforeUnmount(() => {
+  if (markerInstance && mapInstance) {
+    mapInstance.removeOverlay(markerInstance)
+  }
+  clearOverlays()
+  if (mapInstance) {
+    mapInstance.removeEventListener('click', onMapClick)
+    mapInstance.destroy()
+    mapInstance = null
+  }
+})
+
+// ====== 监听 markers 变化 ======
+watch(
+  () => props.markers,
+  () => {
+    if (mapLoaded.value) {
+      renderMarkers()
+    }
+  },
+  { deep: true }
+)
+
+watch(
+  () => props.center,
+  (newCenter) => {
+    if (mapLoaded.value && newCenter && newCenter.lng !== undefined) {
+      const BMapGL = window.BMapGL
+      if (BMapGL) {
+        mapInstance.panTo(new BMapGL.Point(newCenter.lng, newCenter.lat))
+      }
+    }
+  },
+  { deep: true }
+)
 </script>
 
 <style lang="scss" scoped>
 @use '@/assets/styles/variables' as *;
 
-.map-card {
+.baidu-map-card {
+  position: relative;
   width: 100%;
   border-radius: $radius-md;
   overflow: hidden;
-  cursor: pointer;
-  position: relative;
-}
-
-.map-placeholder {
-  width: 100%;
-  height: 100%;
-  position: relative;
   background: #e8f0fe;
-  border: 2px dashed #93c5fd;
-  border-radius: $radius-md;
-}
 
-.map-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  width: 100%;
-  height: 100%;
-  position: absolute;
-  inset: 0;
-  opacity: 0.3;
-
-  .grid-cell {
-    border: 1px solid #93c5fd;
+  &.is-picker {
+    cursor: crosshair;
   }
 }
 
+.map-container {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+}
+
+// 加载 / 错误 遮罩
 .map-overlay {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 10;
+  background: #e8f0fe;
+  border: 2px dashed #93c5fd;
+  border-radius: $radius-md;
 }
 
-.map-empty {
+.map-placeholder {
   text-align: center;
   p {
     margin-top: 8px;
@@ -104,19 +420,65 @@ function handleClick() {
   }
 }
 
-.map-markers {
-  position: absolute;
-  inset: 0;
+.map-error-overlay {
+  background: #fef2f2;
+  border-color: #fca5a5;
 }
 
-.map-marker {
+// 位置标签
+.picker-location-tag {
   position: absolute;
-  transform: translate(-50%, -100%);
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  color: $primary;
+
+  .tag-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+// 缩放控件
+.map-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 100;
+}
+
+// 点击提示
+.map-click-hint {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 11px;
+  text-align: center;
   cursor: pointer;
-  transition: transform 0.2s;
+  z-index: 50;
+  transition: background 0.2s;
 
   &:hover {
-    transform: translate(-50%, -100%) scale(1.15);
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  .hint-text {
+    opacity: 0.9;
   }
 }
 </style>
