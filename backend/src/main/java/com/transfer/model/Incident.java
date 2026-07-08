@@ -124,6 +124,20 @@ public class Incident extends AuditableEntity {
 
     private LocalDateTime supportDecisionAt;
 
+    /**
+     * 面向普通市民的即时提示，不作为正式调度方案。
+     */
+    @Column(length = 1000)
+    private String citizenImmediateAdvice;
+
+    @Column(nullable = false)
+    private Boolean casualtyDetected = false;
+
+    private Integer estimatedPoliceArrivalMinutes;
+
+    @Column(length = 160)
+    private String policeArrivalText;
+
     private Long reportUserId;
 
     public String getIncidentNo() {
@@ -399,6 +413,43 @@ public class Incident extends AuditableEntity {
             LocalDateTime supportDecisionAt
     ) {
         this.supportDecisionAt = supportDecisionAt;
+    }
+
+    public String getCitizenImmediateAdvice() {
+        return citizenImmediateAdvice;
+    }
+
+    public void setCitizenImmediateAdvice(
+            String citizenImmediateAdvice
+    ) {
+        this.citizenImmediateAdvice = citizenImmediateAdvice;
+    }
+
+    public Boolean getCasualtyDetected() {
+        return casualtyDetected;
+    }
+
+    public void setCasualtyDetected(Boolean casualtyDetected) {
+        this.casualtyDetected = casualtyDetected;
+    }
+
+    public Integer getEstimatedPoliceArrivalMinutes() {
+        return estimatedPoliceArrivalMinutes;
+    }
+
+    public void setEstimatedPoliceArrivalMinutes(
+            Integer estimatedPoliceArrivalMinutes
+    ) {
+        this.estimatedPoliceArrivalMinutes =
+                estimatedPoliceArrivalMinutes;
+    }
+
+    public String getPoliceArrivalText() {
+        return policeArrivalText;
+    }
+
+    public void setPoliceArrivalText(String policeArrivalText) {
+        this.policeArrivalText = policeArrivalText;
     }
 
     public Long getReportUserId() {

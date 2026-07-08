@@ -103,8 +103,7 @@ public class MapService {
                     false,
                     "",
                     "",
-                    "未配置浏览器端AK。"
-                            + "百度地图JavaScript API必须使用浏览器端AK。"
+                    "未配置浏览器端AK。百度地图JavaScript API必须使用浏览器端AK。"
             );
         }
 
@@ -137,9 +136,6 @@ public class MapService {
                         ? CoordinateType.WGS84
                         : incident.getCoordinateType();
 
-        /*
-         * 数据库中已有转换结果时直接使用缓存。
-         */
         if (incident.getBaiduLongitude() != null
                 && incident.getBaiduLatitude() != null) {
             return fromStoredIncident(
@@ -150,9 +146,6 @@ public class MapService {
 
         MapProvider.MapLocation location;
 
-        /*
-         * 情况一：事故有经纬度。
-         */
         if (incident.getLongitude() != null
                 && incident.getLatitude() != null) {
 
@@ -193,9 +186,6 @@ public class MapService {
                 );
             }
 
-        /*
-         * 情况二：没有经纬度，但有文字地址。
-         */
         } else if (hasText(incident.getAddress())) {
             location = mapProvider.geocode(
                     incident.getAddress(),

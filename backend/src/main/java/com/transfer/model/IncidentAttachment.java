@@ -20,6 +20,12 @@ public class IncidentAttachment extends AuditableEntity {
     @Column(length = 80)
     private String contentType;
 
+    /**
+     * PHOTO / VIDEO / OTHER。
+     */
+    @Column(nullable = false, length = 20)
+    private String attachmentType = "OTHER";
+
     @Column(nullable = false, length = 500)
     private String filePath;
 
@@ -60,6 +66,14 @@ public class IncidentAttachment extends AuditableEntity {
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public String getAttachmentType() {
+        return attachmentType;
+    }
+
+    public void setAttachmentType(String attachmentType) {
+        this.attachmentType = attachmentType;
     }
 
     public String getFilePath() {

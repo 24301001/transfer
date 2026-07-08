@@ -1,11 +1,13 @@
 package com.transfer.controller;
 
 import com.transfer.dto.CreateIncidentRequest;
+import com.transfer.dto.IncidentArrivalEstimateResponse;
 import com.transfer.dto.IncidentDetailResponse;
 import com.transfer.dto.PredictionDisplayResponse;
 import com.transfer.dto.PredictionModuleResultRequest;
 import com.transfer.dto.PredictionRequest;
 import com.transfer.dto.PredictionSubmitResponse;
+import com.transfer.dto.PublicIncidentSubmitResponse;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
 import com.transfer.model.Incident;
@@ -55,6 +57,28 @@ public class IncidentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(incidentService.createWithAttachments(request, files));
     }
 
+    /**
+     * 普通市民事故上报入口。
+     * incident 为 JSON part；photos 为必传/选传现场照片；videos/video 为选传现场视频。
+     */
+    @PostMapping(value = "/public-report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<PublicIncidentSubmitResponse> publicReport(
+            @RequestPart("incident") @Valid CreateIncidentRequest request,
+            @RequestPart(value = "photos", required = false) List<MultipartFile> photos,
+            @RequestPart(value = "videos", required = false) List<MultipartFile> videos,
+            @RequestPart(value = "video", required = false) MultipartFile video
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(
+                        incidentService.publicReport(
+                                request,
+                                photos,
+                                videos,
+                                video
+                        )
+                );
+    }
+
     @PostMapping(value = "/{incidentId}/attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<IncidentAttachment> uploadAttachment(
             @PathVariable Long incidentId,
@@ -62,6 +86,22 @@ public class IncidentController {
             @RequestParam(value = "uploadedBy", required = false) Long uploadedBy
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(incidentService.uploadAttachment(incidentId, file, uploadedBy));
+    }
+
+    @PostMapping(value = "/{incidentId}/videos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<IncidentAttachment> uploadVideo(
+            @PathVariable Long incidentId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "uploadedBy", required = false) Long uploadedBy
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(
+                        incidentService.uploadVideo(
+                                incidentId,
+                                file,
+                                uploadedBy
+                        )
+                );
     }
 
     @PostMapping(value = "/{incidentId}/attachments/batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -118,6 +158,13 @@ public class IncidentController {
     @GetMapping("/{incidentId}/prediction-result/latest")
     public PredictionDisplayResponse findLatestPrediction(@PathVariable Long incidentId) {
         return incidentService.findLatestPrediction(incidentId);
+    }
+
+    @GetMapping("/{incidentId}/arrival-estimate")
+    public IncidentArrivalEstimateResponse findArrivalEstimate(
+            @PathVariable Long incidentId
+    ) {
+        return incidentService.findArrivalEstimate(incidentId);
     }
 
     @GetMapping

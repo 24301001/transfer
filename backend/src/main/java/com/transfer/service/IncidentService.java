@@ -6,13 +6,16 @@ import com.transfer.adapter.PredictionOutcome;
 import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
 import com.transfer.common.ResourceNotFoundException;
+import com.transfer.dto.CitizenImmediateAdviceResponse;
 import com.transfer.dto.CreateIncidentRequest;
+import com.transfer.dto.IncidentArrivalEstimateResponse;
 import com.transfer.dto.IncidentDetailResponse;
 import com.transfer.dto.PredictionAttachmentPayload;
 import com.transfer.dto.PredictionDisplayResponse;
 import com.transfer.dto.PredictionModuleResultRequest;
 import com.transfer.dto.PredictionRequest;
 import com.transfer.dto.PredictionSubmitResponse;
+import com.transfer.dto.PublicIncidentSubmitResponse;
 import com.transfer.enums.CoordinateType;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
@@ -61,10 +64,14 @@ public class IncidentService {
     private final DispatchTaskRepository dispatchTaskRepository;
     private final PredictionClient predictionClient;
     private final DeepSeekClient deepSeekClient;
+    private final FormalDispositionPlanService formalDispositionPlanService;
+    private final ArrivalEstimateService arrivalEstimateService;
+    private final CitizenAiService citizenAiService;
     private final OperationLogService operationLogService;
     private final RealtimeService realtimeService;
     private final MapService mapService;
     private final Path uploadDir;
+    private final boolean autoSubmitPredictionOnPublicReport;
 
     public IncidentService(
             IncidentRepository incidentRepository,
@@ -73,10 +80,15 @@ public class IncidentService {
             DispatchTaskRepository dispatchTaskRepository,
             PredictionClient predictionClient,
             DeepSeekClient deepSeekClient,
+            FormalDispositionPlanService formalDispositionPlanService,
+            ArrivalEstimateService arrivalEstimateService,
+            CitizenAiService citizenAiService,
             OperationLogService operationLogService,
             RealtimeService realtimeService,
             MapService mapService,
-            @Value("${app.upload-dir:uploads}") String uploadDir
+            @Value("${app.upload-dir:uploads}") String uploadDir,
+            @Value("${app.incident.auto-submit-prediction-on-public-report:true}")
+            boolean autoSubmitPredictionOnPublicReport
     ) {
         this.incidentRepository = incidentRepository;
         this.attachmentRepository = attachmentRepository;
@@ -84,9 +96,14 @@ public class IncidentService {
         this.dispatchTaskRepository = dispatchTaskRepository;
         this.predictionClient = predictionClient;
         this.deepSeekClient = deepSeekClient;
+        this.formalDispositionPlanService = formalDispositionPlanService;
+        this.arrivalEstimateService = arrivalEstimateService;
+        this.citizenAiService = citizenAiService;
         this.operationLogService = operationLogService;
         this.realtimeService = realtimeService;
         this.mapService = mapService;
+        this.autoSubmitPredictionOnPublicReport =
+                autoSubmitPredictionOnPublicReport;
 
         this.uploadDir = Path.of(uploadDir)
                 .toAbsolutePath()
@@ -150,6 +167,10 @@ public class IncidentService {
                 request.trafficFlow()
         );
 
+        incident.setPeopleFlow(
+                request.peopleFlow()
+        );
+
         incident.setWeather(
                 trimToNull(request.weather())
         );
@@ -158,8 +179,19 @@ public class IncidentService {
                 trimToNull(request.roadLevel())
         );
 
+        incident.setRoadStatus(
+                trimToNull(request.roadStatus())
+        );
+
         incident.setReportUserId(
                 request.reportUserId()
+        );
+
+        incident.setCasualtyDetected(
+                citizenAiService.hasCasualtyRisk(
+                        request.description(),
+                        request.initialAccidentType()
+                )
         );
 
         incident.setStatus(
@@ -186,6 +218,8 @@ public class IncidentService {
                     ex.getMessage()
             );
         }
+
+        arrivalEstimateService.applyEstimate(incident);
 
         Incident saved =
                 incidentRepository.save(incident);
@@ -239,6 +273,94 @@ public class IncidentService {
     }
 
     /**
+     * 普通市民事故上报入口：保存事故、照片/视频，生成即时安全提示，
+     * 并按配置把事故提交给数据预测模块。
+     */
+    @Transactional
+    public PublicIncidentSubmitResponse publicReport(
+            CreateIncidentRequest request,
+            List<MultipartFile> photos,
+            List<MultipartFile> videos,
+            MultipartFile video
+    ) {
+        Incident incident = create(request);
+
+        uploadOptionalFiles(
+                incident.getId(),
+                photos,
+                request.reportUserId(),
+                "PHOTO"
+        );
+
+        uploadOptionalFiles(
+                incident.getId(),
+                videos,
+                request.reportUserId(),
+                "VIDEO"
+        );
+
+        if (video != null && !video.isEmpty()) {
+            uploadAttachment(
+                    incident.getId(),
+                    video,
+                    request.reportUserId(),
+                    "VIDEO"
+            );
+        }
+
+        CitizenImmediateAdviceResponse immediateAdvice =
+                citizenAiService.generateImmediateAdvice(incident);
+
+        incident.setCitizenImmediateAdvice(
+                immediateAdvice.immediateAdvice()
+        );
+        incident.setCasualtyDetected(
+                Boolean.TRUE.equals(
+                        immediateAdvice.casualtyDetected()
+                )
+        );
+        incident = incidentRepository.save(incident);
+
+        PredictionSubmitResponse predictionSubmit = null;
+        if (autoSubmitPredictionOnPublicReport) {
+            predictionSubmit = submitPredictionRequest(
+                    incident.getId(),
+                    request.reportUserId()
+            );
+        }
+
+        return new PublicIncidentSubmitResponse(
+                findDetail(incident.getId()),
+                immediateAdvice,
+                incident.getEstimatedPoliceArrivalMinutes(),
+                incident.getPoliceArrivalText(),
+                predictionSubmit
+        );
+    }
+
+    /**
+     * 查询事故的预计交警到达时间。
+     */
+    @Transactional
+    public IncidentArrivalEstimateResponse findArrivalEstimate(
+            Long incidentId
+    ) {
+        Incident incident = findIncident(incidentId);
+        IncidentArrivalEstimateResponse response =
+                arrivalEstimateService.estimateFor(incident);
+
+        incident.setEstimatedPoliceArrivalMinutes(
+                response.estimatedPoliceArrivalMinutes()
+        );
+        incident.setPoliceArrivalText(
+                response.estimatedPoliceArrivalText()
+        );
+        incidentRepository.save(incident);
+
+        return response;
+    }
+
+    /**
      * 为一个事故批量上传附件。
      */
     @Transactional
@@ -286,11 +408,47 @@ public class IncidentService {
             MultipartFile file,
             Long uploadedBy
     ) {
+        return uploadAttachment(
+                incidentId,
+                file,
+                uploadedBy,
+                null
+        );
+    }
+
+    /**
+     * 上传单个事故视频。
+     */
+    @Transactional
+    public IncidentAttachment uploadVideo(
+            Long incidentId,
+            MultipartFile file,
+            Long uploadedBy
+    ) {
+        return uploadAttachment(
+                incidentId,
+                file,
+                uploadedBy,
+                "VIDEO"
+        );
+    }
+
+    private IncidentAttachment uploadAttachment(
+            Long incidentId,
+            MultipartFile file,
+            Long uploadedBy,
+            String attachmentType
+    ) {
         if (file == null || file.isEmpty()) {
             throw new BadRequestException(
                     "Attachment file is required"
             );
         }
+
+        String resolvedAttachmentType =
+                resolveAttachmentType(file, attachmentType);
+
+        validateAttachmentFile(file, resolvedAttachmentType);
 
         Incident incident =
                 findIncident(incidentId);
@@ -346,6 +504,10 @@ public class IncidentService {
                     file.getContentType()
             );
 
+            attachment.setAttachmentType(
+                    resolvedAttachmentType
+            );
+
             attachment.setFileSize(
                     file.getSize()
             );
@@ -359,7 +521,9 @@ public class IncidentService {
             );
 
             attachment.setRecognitionStatus(
-                    "WAITING_DATA_MODULE"
+                    "VIDEO".equals(resolvedAttachmentType)
+                            ? "NOT_REQUIRED"
+                            : "WAITING_DATA_MODULE"
             );
 
             IncidentAttachment saved =
@@ -379,6 +543,95 @@ public class IncidentService {
             throw new BadRequestException(
                     "Failed to save attachment: "
                             + ex.getMessage()
+            );
+        }
+    }
+
+    private void uploadOptionalFiles(
+            Long incidentId,
+            List<MultipartFile> files,
+            Long uploadedBy,
+            String attachmentType
+    ) {
+        if (files == null || files.isEmpty()) {
+            return;
+        }
+
+        for (MultipartFile file : files) {
+            if (file != null && !file.isEmpty()) {
+                uploadAttachment(
+                        incidentId,
+                        file,
+                        uploadedBy,
+                        attachmentType
+                );
+            }
+        }
+    }
+
+    private String resolveAttachmentType(
+            MultipartFile file,
+            String requestedType
+    ) {
+        if (requestedType != null
+                && !requestedType.isBlank()) {
+            return requestedType.trim().toUpperCase();
+        }
+
+        String contentType = file.getContentType() == null
+                ? ""
+                : file.getContentType().toLowerCase();
+
+        if (contentType.startsWith("image/")) {
+            return "PHOTO";
+        }
+
+        if (contentType.startsWith("video/")) {
+            return "VIDEO";
+        }
+
+        String filename = file.getOriginalFilename() == null
+                ? ""
+                : file.getOriginalFilename().toLowerCase();
+
+        if (filename.endsWith(".jpg")
+                || filename.endsWith(".jpeg")
+                || filename.endsWith(".png")
+                || filename.endsWith(".webp")) {
+            return "PHOTO";
+        }
+
+        if (filename.endsWith(".mp4")
+                || filename.endsWith(".mov")
+                || filename.endsWith(".avi")
+                || filename.endsWith(".webm")) {
+            return "VIDEO";
+        }
+
+        return "OTHER";
+    }
+
+    private void validateAttachmentFile(
+            MultipartFile file,
+            String attachmentType
+    ) {
+        String contentType = file.getContentType() == null
+                ? ""
+                : file.getContentType().toLowerCase();
+
+        if ("PHOTO".equals(attachmentType)
+                && !contentType.isBlank()
+                && !contentType.startsWith("image/")) {
+            throw new BadRequestException(
+                    "Photo attachment must be an image file"
+            );
+        }
+
+        if ("VIDEO".equals(attachmentType)
+                && !contentType.isBlank()
+                && !contentType.startsWith("video/")) {
+            throw new BadRequestException(
+                    "Video attachment must be a video file"
             );
         }
     }
@@ -471,13 +724,10 @@ public class IncidentService {
                 );
 
         String suggestions =
-                firstNonBlank(
-                        request.suggestion(),
-                        buildDispositionSuggestion(
-                                incident,
-                                request,
-                                riskFactors
-                        )
+                formalDispositionPlanService.buildFormalPlan(
+                        incident,
+                        request,
+                        riskFactors
                 );
 
         PredictionOutcome outcome =
@@ -519,6 +769,16 @@ public class IncidentService {
 
         result.setRiskLevel(
                 request.riskLevel()
+        );
+
+        result.setRiskScore(
+                request.riskScore()
+        );
+
+        result.setImageEvidence(
+                joinImageEvidence(
+                        request.imageEvidence()
+                )
         );
 
         result.setCongestionDurationMinutes(
@@ -896,9 +1156,10 @@ public class IncidentService {
         );
 
         /*
-         * 预测完成后，重新进行自动支援判断。
+         * 预测完成后，重新进行自动支援判断并刷新预计到达时间。
          */
         applyAutomaticSupportDecision(incident);
+        arrivalEstimateService.applyEstimate(incident);
 
         incidentRepository.save(incident);
     }
@@ -1256,6 +1517,31 @@ public class IncidentService {
         }
 
         return joiner.toString();
+    }
+
+    private String joinImageEvidence(
+            List<String> imageEvidence
+    ) {
+        if (imageEvidence == null
+                || imageEvidence.isEmpty()) {
+            return null;
+        }
+
+        StringJoiner joiner =
+                new StringJoiner("；");
+
+        for (String evidence : imageEvidence) {
+            if (evidence != null
+                    && !evidence.isBlank()) {
+                joiner.add(evidence.trim());
+            }
+        }
+
+        String result = joiner.toString();
+
+        return result.isBlank()
+                ? null
+                : result;
     }
 
     private String joinRiskFactors(
