@@ -352,7 +352,7 @@ import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
 import { addAccident as apiAddAccident, getAccidentDetail } from '@/services/modules/accident'
 import { reverseGeocode } from '@/services/modules/map'
-import { PRESET_LOCATIONS, getPresetCoords, getRealCurrentPosition, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
+import { PRESET_LOCATIONS, getPresetCoords, getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import {
   Upload, Aim, LocationFilled, Loading, View, Collection,
@@ -585,27 +585,55 @@ function onMapLocationConfirm(data) {
 async function handleAutoLocate() {
   locating.value = true
   try {
-    // 优先使用真实 GPS
+    // ---------- 1. 优先使用真实 GPS ----------
     let coords
+    let source = 'GPS'
     try {
       coords = await getRealCurrentPosition()
     } catch (gpsErr) {
-      console.warn('[ReportAccident] GPS 定位失败，使用降级方案:', gpsErr.message)
-      // 降级：提示用户在地图上点击选择
-      ElMessage.warning('GPS 定位失败，请点击地图选择位置')
-      locating.value = false
-      return
+      console.warn('[ReportAccident] GPS 定位失败，尝试百度 IP 定位:', gpsErr.message)
+
+      // ---------- 2. 降级：百度地图 IP 定位 ----------
+      try {
+        coords = await getBaiduIPLocation()
+        source = 'IP'
+      } catch (ipErr) {
+        console.warn('[ReportAccident] 百度 IP 定位也失败:', ipErr.message)
+        ElMessage.warning('自动定位不可用，请点击地图选择位置')
+        locating.value = false
+        return
+      }
     }
 
     const { lat, lng } = coords // WGS84
 
     // 反向地理编码获取地址
+    // 优先用 BMapGL.Geocoder（客户端走浏览器 AK，不走后端，避免 502）
     let addressText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
     try {
-      const loc = await reverseGeocode(lng, lat, 'WGS84')
-      addressText = loc.formattedAddress || loc.semanticDescription || addressText
-    } catch {
-      // 地址解析失败不影响定位
+      const BMapGL = window.BMapGL
+      if (BMapGL && typeof BMapGL.Geocoder === 'function') {
+        const geocoder = new BMapGL.Geocoder()
+        const bd09 = wgs84ToBd09(lng, lat)
+        const result = await new Promise((resolve, reject) => {
+          geocoder.getLocation(
+            new BMapGL.Point(bd09.lng, bd09.lat),
+            (res) => {
+              res && res.address ? resolve(res) : reject(new Error('无地址'))
+            }
+          )
+        })
+        if (result.address) {
+          addressText = result.address
+        }
+      } else {
+        // Geocoder 不可用时降级调用后端
+        const loc = await reverseGeocode(lng, lat, 'WGS84')
+        addressText = loc.formattedAddress || loc.semanticDescription || addressText
+      }
+    } catch (addrErr) {
+      console.warn('[ReportAccident] 地址解析失败，使用坐标作为地址:', addrErr.message)
+      // 地址解析失败不影响定位，直接用坐标
     }
 
     // 更新表单
@@ -619,7 +647,11 @@ async function handleAutoLocate() {
     // 设置地图中心（WGS84 → MapCard 需要 BD09）
     setMapCenterToWgs84(lng, lat)
 
-    ElMessage.success('定位成功')
+    if (source === 'IP') {
+      ElMessage.info(`IP 定位成功（${addressText}）`)
+    } else {
+      ElMessage.success('定位成功')
+    }
   } catch (err) {
     ElMessage.error(err.message || '定位失败')
   } finally {

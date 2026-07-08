@@ -14,6 +14,7 @@
 import request from '@/services/request'
 
 const BAIDU_MAP_API_URL = 'https://api.map.baidu.com/api'
+const CALLBACK_NAME = '__onBMapGLReady'
 
 let loadPromise = null
 
@@ -38,60 +39,75 @@ async function fetchAkFromBackend() {
  * @returns {Promise<typeof BMapGL>}
  */
 export async function loadBaiduMap(ak) {
-  // 如果已有加载中的 Promise，复用
   if (loadPromise) return loadPromise
 
-  loadPromise = (async () => {
-    // 如果全局对象已存在（之前已加载完成），直接返回
+  loadPromise = new Promise((resolve, reject) => {
+    // 如果全局对象已存在，直接返回
     if (window.BMapGL && typeof window.BMapGL.Map === 'function') {
-      return window.BMapGL
+      resolve(window.BMapGL)
+      return
     }
 
-    // ----- 解析 AK -----
-    let resolvedAk = ak
-    if (!resolvedAk) {
-      resolvedAk = await fetchAkFromBackend()
-    }
-    if (!resolvedAk) {
-      loadPromise = null
-      throw new Error(
-        '百度地图 AK 未提供。请配置后端 baidu.map.browser-ak，' +
-        '或调用 loadBaiduMap(ak) 时传入 AK 参数。'
-      )
-    }
+    let resolved = false
 
-    // ----- 加载百度地图脚本 -----
-    return new Promise((resolve, reject) => {
-      const scriptUrl = `${BAIDU_MAP_API_URL}?v=1.0&type=webgl&ak=${resolvedAk}`
-
-      const script = document.createElement('script')
-      script.src = scriptUrl
-      script.type = 'text/javascript'
-      script.async = true
-      script.onerror = () => {
-        loadPromise = null
-        reject(new Error('百度地图脚本加载失败，请检查网络或 AK 是否正确'))
+    // 注册全局 callback — 百度脚本加载完成后会调用此函数
+    window[CALLBACK_NAME] = () => {
+      resolved = true
+      if (window.BMapGL) {
+        resolve(window.BMapGL)
+      } else {
+        reject(new Error('百度地图 API 加载完成但 BMapGL 对象不存在'))
       }
+    }
 
-      // 轮询等待 BMapGL 可用
-      const checkInterval = setInterval(() => {
-        if (window.BMapGL && typeof window.BMapGL.Map === 'function') {
-          clearInterval(checkInterval)
-          clearTimeout(timeoutId)
-          resolve(window.BMapGL)
+    // 异步解析 AK，然后注入 script 标签
+    ;(async () => {
+      try {
+        // ----- 解析 AK -----
+        let resolvedAk = ak
+        if (!resolvedAk) {
+          resolvedAk = await fetchAkFromBackend()
         }
-      }, 100)
+        if (!resolvedAk) {
+          loadPromise = null
+          reject(new Error(
+            '百度地图 AK 未提供。请配置后端 baidu.map.browser-ak，' +
+            '或调用 loadBaiduMap(ak) 时传入 AK 参数。'
+          ))
+          return
+        }
 
-      // 30 秒超时
-      const timeoutId = setTimeout(() => {
-        clearInterval(checkInterval)
+        // ----- 加载百度地图脚本 -----
+        // 注意：不设置 script.async = true。
+        // 百度地图内部用 document.write 加载依赖模块，
+        // 异步脚本中 document.write 会被浏览器禁止。
+        const scriptUrl = `${BAIDU_MAP_API_URL}?v=1.0&type=webgl&ak=${resolvedAk}&callback=${CALLBACK_NAME}`
+
+        const script = document.createElement('script')
+        script.src = scriptUrl
+        script.type = 'text/javascript'
+        script.onerror = () => {
+          if (!resolved) {
+            loadPromise = null
+            reject(new Error('百度地图脚本加载失败，请检查网络或 AK 是否正确'))
+          }
+        }
+
+        // 30 秒超时保护
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            loadPromise = null
+            reject(new Error('百度地图 API 加载超时'))
+          }
+        }, 30000)
+
+        document.head.appendChild(script)
+      } catch (err) {
         loadPromise = null
-        reject(new Error('百度地图 API 加载超时'))
-      }, 30000)
-
-      document.head.appendChild(script)
-    })
-  })()
+        reject(err)
+      }
+    })()
+  })
 
   return loadPromise
 }
@@ -101,4 +117,5 @@ export async function loadBaiduMap(ak) {
  */
 export function resetBaiduMapLoader() {
   loadPromise = null
+  delete window[CALLBACK_NAME]
 }

@@ -190,3 +190,48 @@ export function getRealCurrentPosition() {
 export function getPresetCoords(id) {
   return PRESET_COORDS[id] || null
 }
+
+/**
+ * 百度地图 IP 定位降级 — 使用 BMapGL.Geolocation 获取位置（BD09 → WGS84）
+ *
+ * 无需用户授予 GPS 权限，基于 IP 粗略定位。
+ * 需要 BMapGL 已加载（页面中 MapCard 加载后 window.BMapGL 可用）。
+ * @returns {Promise<{lat: number, lng: number}>} WGS84 坐标
+ */
+export function getBaiduIPLocation() {
+  return new Promise((resolve, reject) => {
+    const BMapGL = window.BMapGL
+    if (!BMapGL || typeof BMapGL.Geolocation !== 'function') {
+      reject(new Error('百度地图未加载，无法使用 IP 定位'))
+      return
+    }
+
+    try {
+      const geolocation = new BMapGL.Geolocation()
+
+      geolocation.getCurrentPosition(
+        function (result) {
+          // this 指向 geolocation 实例
+          const status = this.getStatus()
+          // BMAP_STATUS_SUCCESS === 0
+          if (status === 0 && result) {
+            // result.point（BMapGL.Point）或 result 直接含 lng/lat
+            const bd09Lng = result.point?.lng ?? result.lng
+            const bd09Lat = result.point?.lat ?? result.lat
+
+            if (bd09Lng != null && bd09Lat != null) {
+              // BD09 → WGS84
+              const wgs84 = bd09ToWgs84(bd09Lng, bd09Lat)
+              resolve(wgs84)
+              return
+            }
+          }
+          reject(new Error('百度 IP 定位未返回有效坐标'))
+        },
+        { enableHighAccuracy: false, timeout: 5000 }
+      )
+    } catch (err) {
+      reject(new Error('百度地图定位异常: ' + err.message))
+    }
+  })
+}
