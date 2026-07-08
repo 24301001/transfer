@@ -58,8 +58,28 @@ public class IncidentController {
     }
 
     /**
-     * 普通市民事故上报入口。
-     * incident 为 JSON part；photos 为必传/选传现场照片；videos/video 为选传现场视频。
+     * 普通市民事故上报入口：纯 JSON 版本。
+     *
+     * Apifox 不上传照片/视频时直接用 application/json 测这个方法即可。
+     */
+    @PostMapping(value = "/public-report", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<PublicIncidentSubmitResponse> publicReportJson(
+            @Valid @RequestBody CreateIncidentRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(
+                        incidentService.publicReport(
+                                request,
+                                null,
+                                null,
+                                null
+                        )
+                );
+    }
+
+    /**
+     * 普通市民事故上报入口：multipart 版本。
+     * incident 为 JSON part；photos 为选传现场照片；videos/video 为选传现场视频。
      */
     @PostMapping(value = "/public-report", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PublicIncidentSubmitResponse> publicReport(

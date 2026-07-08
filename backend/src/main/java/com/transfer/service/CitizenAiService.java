@@ -182,7 +182,52 @@ public class CitizenAiService {
     }
 
     private boolean isInReportScope(String question) {
-        String text = safe(question).toLowerCase(Locale.ROOT);
+        String text = safe(question).toLowerCase(Locale.ROOT).trim();
+
+        if (text.isBlank()) {
+            return true;
+        }
+
+        /*
+         * 明确越界的问题必须直接拦截。
+         * 不能因为当前页面存在事故描述，就把“旅游/娱乐/股票”等问题错误判定为事故上报问题。
+         */
+        if (containsAny(
+                text,
+                "旅游",
+                "景点",
+                "去哪玩",
+                "吃饭",
+                "餐厅",
+                "酒店",
+                "电影",
+                "游戏",
+                "购物",
+                "股票",
+                "基金",
+                "彩票",
+                "作业",
+                "论文",
+                "代码",
+                "维修费",
+                "修车",
+                "赔偿",
+                "赔钱",
+                "定责",
+                "责任划分",
+                "罚款",
+                "扣分",
+                "保险理赔",
+                "医学诊断",
+                "用药",
+                "weather",
+                "travel",
+                "stock",
+                "movie",
+                "game"
+        )) {
+            return false;
+        }
 
         if (containsAny(
                 text,
@@ -194,6 +239,7 @@ public class CitizenAiService {
                 "剐蹭",
                 "刮蹭",
                 "上报",
+                "提交",
                 "上传",
                 "照片",
                 "图片",
@@ -201,13 +247,17 @@ public class CitizenAiService {
                 "定位",
                 "位置",
                 "地点",
+                "地址",
                 "报警",
                 "120",
                 "110",
+                "122",
                 "交警",
-                "保险",
                 "受伤",
                 "伤亡",
+                "流血",
+                "昏迷",
+                "被困",
                 "安全",
                 "三角牌",
                 "警示牌",
@@ -215,6 +265,9 @@ public class CitizenAiService {
                 "撤离",
                 "高速",
                 "车道",
+                "占道",
+                "堵车",
+                "拥堵",
                 "report",
                 "upload",
                 "location",
@@ -226,7 +279,24 @@ public class CitizenAiService {
             return true;
         }
 
-        return text.length() <= 12;
+        /*
+         * 上报页面内常见的短问题。
+         * 只放页面操作相关语义，不再用“长度小于 12”兜底。
+         */
+        return containsAny(
+                text,
+                "怎么办",
+                "怎么做",
+                "怎么处理",
+                "怎么填",
+                "填什么",
+                "下一步",
+                "需要什么",
+                "不会填",
+                "不懂",
+                "可以吗",
+                "要不要"
+        );
     }
 
     private String citizenSystemPrompt() {
