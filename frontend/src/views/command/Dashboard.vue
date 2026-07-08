@@ -5,8 +5,8 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-inner">
-            <div class="stat-icon" style="background: #eff6ff;">
-              <el-icon :size="24" color="#1a56db"><WarningFilled /></el-icon>
+            <div class="stat-icon" style="background: rgba(59,130,246,0.10);">
+              <el-icon :size="24" color="#3b82f6"><WarningFilled /></el-icon>
             </div>
             <div class="stat-info">
               <span class="stat-num">{{ stats.today }}</span>
@@ -18,7 +18,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-inner">
-            <div class="stat-icon" style="background: #fef2f2;">
+            <div class="stat-icon" style="background: rgba(239,68,68,0.10);">
               <el-icon :size="24" color="#ef4444"><CircleCloseFilled /></el-icon>
             </div>
             <div class="stat-info">
@@ -31,7 +31,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-inner">
-            <div class="stat-icon" style="background: #fffbeb;">
+            <div class="stat-icon" style="background: rgba(245,158,11,0.10);">
               <el-icon :size="24" color="#f59e0b"><Clock /></el-icon>
             </div>
             <div class="stat-info">
@@ -44,7 +44,7 @@
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-inner">
-            <div class="stat-icon" style="background: #f0fdf4;">
+            <div class="stat-icon" style="background: rgba(16,185,129,0.10);">
               <el-icon :size="24" color="#10b981"><CircleCheckFilled /></el-icon>
             </div>
             <div class="stat-info">
@@ -334,48 +334,75 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+// ===== 统计卡片 =====
 .stat-cards {
   flex-shrink: 0;
   margin-bottom: 16px;
 
   .stat-card {
-    --el-card-padding: 16px;
+    --el-card-padding: 0;
+  }
+
+  .el-card {
+    border-radius: 14px;
+    overflow: hidden;
   }
 
   .stat-inner {
     display: flex;
     align-items: center;
     gap: 16px;
+    padding: 16px 18px;
   }
 
   .stat-icon {
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    position: relative;
+
+    // 渐变底色覆盖原始内联 style
+    &[style*="background: rgba(59,130,246,0.10)"] {
+      background: linear-gradient(135deg, rgba($accent, 0.12), rgba($accent-secondary, 0.06)) !important;
+    }
+    &[style*="background: rgba(239,68,68,0.10)"] {
+      background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(248,113,113,0.06)) !important;
+    }
+    &[style*="background: rgba(245,158,11,0.10)"] {
+      background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.06)) !important;
+    }
+    &[style*="background: rgba(16,185,129,0.10)"] {
+      background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(52,211,153,0.06)) !important;
+    }
   }
 
   .stat-info {
     display: flex;
     flex-direction: column;
+    gap: 2px;
   }
 
   .stat-num {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     color: $text-primary;
-    line-height: 1.2;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
   }
 
   .stat-label {
-    font-size: 13px;
+    font-size: 12px;
     color: $text-secondary;
+    font-weight: 500;
   }
 }
 
+// ===== 主区域（地图） =====
 .main-section {
   flex: 1;
   min-height: 0;
@@ -390,14 +417,22 @@ onUnmounted(() => {
   .card-header {
     flex-shrink: 0;
     margin-bottom: 12px;
+    padding: 0;
+
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+    }
   }
 
   :deep(.baidu-map-card) {
     flex: 1;
     min-height: 0;
+    border-radius: 10px;
   }
 }
 
+// ===== 通用卡片头部 =====
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -405,8 +440,11 @@ onUnmounted(() => {
   margin-bottom: 16px;
 
   h3 {
+    font-family: $font-sans;
     font-size: 16px;
     font-weight: 600;
+    color: $text-primary;
+    letter-spacing: -0.01em;
   }
 }
 

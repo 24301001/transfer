@@ -115,7 +115,7 @@
               :closable="false"
               show-icon
             />
-            <div v-if="!accident.supportAdvice" style="text-align:center;color:#9ca3af;padding:16px;">
+            <div v-if="!accident.supportAdvice" style="text-align:center;color:#94a3b8;padding:16px;">
               暂无支援建议
             </div>
           </div>
@@ -126,7 +126,7 @@
       <div class="page-card" style="margin-top:16px;" v-if="accident.aiExplanation">
         <h3 class="section-title">AI 分析结果说明</h3>
         <div class="ai-box">
-          <el-icon :size="20" color="#1a56db"><ChatLineSquare /></el-icon>
+          <el-icon :size="20" color="#3b82f6"><ChatLineSquare /></el-icon>
           <p>{{ accident.aiExplanation }}</p>
         </div>
       </div>
@@ -234,6 +234,10 @@ function createDispatch() {
 
 .back-bar {
   margin-bottom: 12px;
+
+  .el-button {
+    &:hover { color: $accent; }
+  }
 }
 
 .detail-header {
@@ -242,9 +246,12 @@ function createDispatch() {
   align-items: flex-start;
 
   h2 {
+    font-family: $font-sans;
     font-size: 22px;
     font-weight: 700;
+    color: $text-primary;
     margin-bottom: 8px;
+    letter-spacing: -0.01em;
   }
 
   .header-meta {
@@ -266,11 +273,13 @@ function createDispatch() {
 }
 
 .section-title {
+  font-family: $font-sans;
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 14px;
-  padding-left: 10px;
-  border-left: 3px solid $primary;
+  padding-left: 12px;
+  border-left: 3px solid $accent;
+  color: $text-primary;
 }
 
 .image-gallery {
@@ -281,15 +290,19 @@ function createDispatch() {
   .gallery-img {
     width: 100%;
     height: 120px;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
+    transition: opacity 0.2s;
+
+    &:hover { opacity: 0.85; }
   }
 }
 
 .predict-value {
   font-size: 16px;
   font-weight: 600;
-  color: $primary;
+  color: $accent;
+  font-variant-numeric: tabular-nums;
 }
 
 .no-support {
@@ -304,9 +317,12 @@ function createDispatch() {
 .ai-box {
   display: flex;
   gap: 12px;
-  padding: 16px;
-  background: #f0f5ff;
-  border-radius: 8px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba($accent, 0.05), rgba($accent-secondary, 0.02));
+  border-radius: 10px;
+  border: 1px solid rgba($accent, 0.08);
+
+  .el-icon { color: $accent; flex-shrink: 0; margin-top: 2px; }
 
   p {
     flex: 1;

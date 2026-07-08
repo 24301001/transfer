@@ -110,6 +110,8 @@ defineExpose({ fileList, clear: () => { fileList.value = [] } })
 </script>
 
 <style lang="scss" scoped>
+@use '@/assets/styles/variables' as *;
+
 .photo-uploader {
   .upload-area {
     display: flex;
@@ -118,15 +120,58 @@ defineExpose({ fileList, clear: () => { fileList.value = [] } })
     flex-wrap: wrap;
   }
 
+  // 覆盖 Element Plus 上传组件卡片样式
+  :deep(.el-upload--picture-card) {
+    border: 2px dashed $border;
+    border-radius: 12px;
+    background: rgba($border-light, 0.4);
+    transition: all 0.2s ease-out;
+    width: 96px;
+    height: 96px;
+
+    &:hover {
+      border-color: $accent;
+      background: rgba($accent, 0.04);
+    }
+
+    .el-icon { color: $text-light; transition: color 0.2s; }
+
+    &:hover .el-icon { color: $accent; }
+  }
+
+  :deep(.el-upload-list__item) {
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all 0.2s;
+    width: 96px;
+    height: 96px;
+
+    &:hover {
+      box-shadow: $shadow-md;
+    }
+  }
+
   .upload-tip {
-    font-size: 12px;
-    color: #9ca3af;
+    font-size: 11px;
+    color: $text-light;
     margin-top: 4px;
+    text-align: center;
   }
 
   .camera-upload {
     display: flex;
     align-items: center;
+
+    .el-button {
+      border-radius: 10px;
+      border: 1px dashed $border;
+      height: 40px;
+
+      &:hover {
+        border-color: $accent;
+        color: $accent;
+      }
+    }
   }
 }
 </style>

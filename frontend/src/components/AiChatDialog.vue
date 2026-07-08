@@ -285,7 +285,7 @@ watch(() => props.visible, (val) => {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  background: #f8fafc;
+  background: $border-light;
 }
 
 .welcome {
@@ -337,9 +337,9 @@ watch(() => props.visible, (val) => {
     transition: all 0.2s;
 
     &:hover {
-      border-color: $primary;
-      color: $primary;
-      background: #eff6ff;
+      border-color: $accent;
+      color: $accent;
+      background: rgba($accent, 0.06);
     }
   }
 }
@@ -371,7 +371,7 @@ watch(() => props.visible, (val) => {
 }
 
 .user-avatar {
-  background: #e5e7eb;
+  background: $border-light;
   color: $text-secondary;
 }
 

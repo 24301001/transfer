@@ -41,6 +41,8 @@ function getItemType(action) {
 </script>
 
 <style lang="scss" scoped>
+@use '@/assets/styles/variables' as *;
+
 .status-timeline {
   .timeline-content {
     display: flex;
@@ -48,17 +50,34 @@ function getItemType(action) {
     gap: 8px;
     flex-wrap: wrap;
 
+    .action-tag {
+      .el-tag {
+        border-radius: 6px;
+        font-weight: 500;
+      }
+    }
+
     .operator {
       font-size: 13px;
-      color: #6b7280;
+      color: $text-secondary;
+      font-weight: 500;
     }
 
     .detail {
       font-size: 12px;
-      color: #9ca3af;
+      color: $text-light;
       width: 100%;
       margin-top: 2px;
     }
+  }
+
+  :deep(.el-timeline-item__tail) {
+    border-left-color: rgba($accent, 0.2);
+  }
+
+  :deep(.el-timeline-item__node--primary) {
+    background-color: $accent;
+    border-color: $accent;
   }
 }
 </style>

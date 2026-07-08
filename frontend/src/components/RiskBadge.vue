@@ -32,12 +32,21 @@ const iconSize = computed(() => {
 </script>
 
 <style lang="scss" scoped>
+@use '@/assets/styles/variables' as *;
+
 .risk-badge {
   font-weight: 600;
   border: none;
+  letter-spacing: 0.02em;
+  padding: 0 10px;
 
   .risk-icon {
     margin-right: 3px;
   }
+
+  // 叠加彩色标签底色微调
+  &.el-tag--danger { background: linear-gradient(135deg, #ef4444, #dc2626); }
+  &.el-tag--warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  &.el-tag--success { background: linear-gradient(135deg, #10b981, #059669); }
 }
 </style>

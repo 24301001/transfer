@@ -31,7 +31,7 @@
               <el-progress
                 :percentage="(recordElapsed / 20) * 100"
                 :stroke-width="6"
-                :color="recordElapsed >= 15 ? '#ef4444' : '#1a56db'"
+                :color="recordElapsed >= 15 ? '#ef4444' : '#3b82f6'"
               />
               <el-button
                 type="danger"
@@ -819,32 +819,41 @@ function openAdviceDialog() {
     flex: 1;
     min-width: 180px;
   }
+
+  .el-button {
+    border-radius: 10px;
+    height: 36px;
+  }
 }
 
 .loc-option {
   display: flex;
   justify-content: space-between;
-  .loc-name { font-size: 13px; }
-  .loc-area { font-size: 12px; color: #9ca3af; }
+  .loc-name { font-size: 13px; font-weight: 500; }
+  .loc-area { font-size: 12px; color: $text-light; }
 }
 
 .location-result {
   margin-top: 8px;
-  padding: 6px 12px;
-  background: #eff6ff;
-  border-radius: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba($accent, 0.06), rgba($accent-secondary, 0.02));
+  border: 1px solid rgba($accent, 0.10);
+  border-radius: 8px;
   font-size: 13px;
-  color: $primary;
+  color: $accent;
   display: flex;
   align-items: center;
   gap: 6px;
+  font-weight: 500;
 
   .loc-coords {
-    font-family: 'Courier New', monospace;
+    font-family: $font-mono;
     font-size: 11px;
-    background: rgba(26, 86, 219, 0.1);
+    background: rgba($accent, 0.08);
     padding: 1px 6px;
     border-radius: 4px;
+    color: $text-secondary;
+    font-weight: 400;
   }
 }
 
@@ -861,41 +870,43 @@ function openAdviceDialog() {
   align-items: center;
   gap: 4px;
 
-  .el-icon {
-    font-size: 14px;
-  }
+  .el-icon { font-size: 14px; color: $accent; }
 }
 
 .submit-btn {
-  padding: 12px 40px;
-  font-size: 16px;
+  padding: 12px 44px;
+  font-size: 15px;
+  height: 50px;
+  border-radius: 12px;
 }
 
 .result-container {
   .result-stat {
     text-align: center;
     padding: 16px;
-    background: #f8fafc;
-    border-radius: 8px;
+    background: rgba($border-light, 0.6);
+    border-radius: 10px;
     .stat-label {
       display: block;
       font-size: 12px;
-      color: #6b7280;
+      color: $text-secondary;
       margin-bottom: 6px;
     }
     .stat-value {
       font-size: 20px;
-      font-weight: 600;
+      font-weight: 700;
       color: $text-primary;
+      font-variant-numeric: tabular-nums;
       &.highlight {
-        color: $primary;
+        color: $accent;
       }
     }
   }
 
   .result-section {
-    margin-top: 16px;
+    margin-top: 20px;
     h4 {
+      font-family: $font-sans;
       font-size: 14px;
       font-weight: 600;
       margin-bottom: 10px;
@@ -920,8 +931,10 @@ function openAdviceDialog() {
   align-items: center;
 
   h3 {
+    font-family: $font-sans;
     font-size: 16px;
     font-weight: 600;
+    color: $text-primary;
   }
 }
 
@@ -946,8 +959,8 @@ function openAdviceDialog() {
       color: $text-primary;
       font-weight: 500;
 
-      &.success { color: #10b981; }
-      &.pending { color: #f59e0b; }
+      &.success { color: $success; }
+      &.pending { color: $warning; }
     }
   }
 }
@@ -955,8 +968,8 @@ function openAdviceDialog() {
 .submission-actions {
   display: flex;
   gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid #f0f0f0;
+  padding-top: 14px;
+  border-top: 1px solid $border;
   flex-wrap: wrap;
 }
 
@@ -970,20 +983,24 @@ function openAdviceDialog() {
     justify-content: center;
     gap: 12px;
     padding: 40px 20px;
-    border: 2px dashed #d1d5db;
-    border-radius: 12px;
-    background: #fafafa;
+    border: 2px dashed $border;
+    border-radius: 14px;
+    background: rgba($border-light, 0.4);
     width: 100%;
-    transition: border-color 0.2s;
+    transition: all 0.2s ease-out;
 
     &:hover {
-      border-color: $primary;
+      border-color: rgba($accent, 0.3);
+      background: rgba($accent, 0.03);
     }
+
+    .el-icon { color: $text-light; }
 
     p {
       color: $text-light;
       font-size: 14px;
       margin: 0;
+      font-weight: 500;
     }
   }
 
@@ -993,9 +1010,9 @@ function openAdviceDialog() {
     align-items: center;
     gap: 10px;
     padding: 24px;
-    border: 2px solid #ef4444;
-    border-radius: 12px;
-    background: #fef2f2;
+    border: 2px solid $danger;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba($danger, 0.04), rgba($danger, 0.01));
 
     .recording-indicator {
       display: flex;
@@ -1006,15 +1023,16 @@ function openAdviceDialog() {
         width: 12px;
         height: 12px;
         border-radius: 50%;
-        background: #ef4444;
-        animation: blink 1s infinite;
+        background: $danger;
+        animation: recorder-blink 1s infinite;
       }
 
       .rec-timer {
         font-size: 20px;
         font-weight: 700;
-        color: #ef4444;
+        color: $danger;
         font-variant-numeric: tabular-nums;
+        font-family: $font-mono;
       }
     }
   }
@@ -1025,7 +1043,7 @@ function openAdviceDialog() {
     .preview-video {
       width: 100%;
       max-height: 300px;
-      border-radius: 8px;
+      border-radius: 10px;
       background: #000;
     }
 
@@ -1035,11 +1053,12 @@ function openAdviceDialog() {
       padding: 8px 0;
 
       .video-size, .video-duration {
-        font-size: 12px;
+        font-size: 11px;
         color: $text-light;
-        background: #f3f4f6;
+        background: $border-light;
         padding: 2px 10px;
-        border-radius: 12px;
+        border-radius: 20px;
+        font-family: $font-mono;
       }
     }
 
@@ -1050,16 +1069,12 @@ function openAdviceDialog() {
   }
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-
 .advice-container {
   .advice-section {
     margin-bottom: 20px;
 
     h4 {
+      font-family: $font-sans;
       font-size: 14px;
       font-weight: 600;
       margin-bottom: 10px;

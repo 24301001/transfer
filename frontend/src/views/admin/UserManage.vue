@@ -176,6 +176,8 @@ onMounted(fetchUsers)
 </script>
 
 <style lang="scss" scoped>
+@use '@/assets/styles/variables' as *;
+
 .toolbar {
   display: flex;
   justify-content: flex-end;

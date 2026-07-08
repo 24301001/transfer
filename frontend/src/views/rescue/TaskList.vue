@@ -129,24 +129,33 @@ onUnmounted(() => {
   margin-bottom: 16px;
 
   .stat-card {
-    --el-card-padding: 14px;
+    --el-card-padding: 0;
+  }
+
+  .el-card {
+    border-radius: 14px;
+    overflow: hidden;
   }
 
   .stat-inner {
     display: flex;
     align-items: center;
     gap: 12px;
+    padding: 14px 18px;
 
     .stat-num {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 700;
-      color: $primary;
+      color: $accent;
       line-height: 1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
     }
 
     .stat-label {
-      font-size: 13px;
+      font-size: 12px;
       color: $text-secondary;
+      font-weight: 500;
     }
   }
 }
@@ -159,17 +168,17 @@ onUnmounted(() => {
 
 .task-card {
   background: $bg-white;
-  border-radius: $radius-lg;
-  padding: 18px;
+  border-radius: 14px;
+  padding: 20px;
   box-shadow: $shadow-sm;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s ease-out;
   border: 1px solid $border;
 
   &:hover {
-    box-shadow: $shadow-md;
-    border-color: $primary-lighter;
-    transform: translateY(-2px);
+    box-shadow: $shadow-lg;
+    border-color: rgba($accent, 0.25);
+    transform: translateY(-3px);
   }
 
   .task-header {
@@ -183,6 +192,7 @@ onUnmounted(() => {
     h4 {
       font-size: 16px;
       font-weight: 600;
+      color: $text-primary;
       margin-bottom: 8px;
     }
 
@@ -193,6 +203,8 @@ onUnmounted(() => {
       align-items: center;
       gap: 4px;
       margin-bottom: 8px;
+
+      .el-icon { color: $accent; font-size: 14px; }
     }
 
     .task-meta {
@@ -208,13 +220,14 @@ onUnmounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 12px;
-    padding-top: 10px;
+    margin-top: 14px;
+    padding-top: 12px;
     border-top: 1px solid $border-light;
 
     .task-time {
       font-size: 12px;
       color: $text-light;
+      font-variant-numeric: tabular-nums;
     }
   }
 }

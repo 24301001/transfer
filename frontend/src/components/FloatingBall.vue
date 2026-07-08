@@ -202,7 +202,7 @@ watch(chatVisible, (val) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border: none;
   border-radius: 20px;
   background: $bg-white;
@@ -210,17 +210,21 @@ watch(chatVisible, (val) => {
   font-size: 13px;
   cursor: pointer;
   box-shadow: $shadow-md;
-  transition: all 0.2s;
+  transition: all 0.2s ease-out;
   white-space: nowrap;
 
   &:hover {
-    background: $primary;
+    background: $gradient-accent;
     color: #fff;
     transform: translateX(-4px);
+    box-shadow: $shadow-accent;
   }
+
+  .el-icon { font-size: 16px; }
 
   span {
     font-size: 12px;
+    font-weight: 500;
   }
 }
 
@@ -241,10 +245,10 @@ watch(chatVisible, (val) => {
   height: 52px;
   border-radius: 50%;
   border: none;
-  background: linear-gradient(135deg, $primary, $primary-dark);
+  background: $gradient-accent;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba($primary, 0.4);
+  box-shadow: $shadow-accent-lg;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -253,7 +257,7 @@ watch(chatVisible, (val) => {
 
   &:hover {
     transform: scale(1.08);
-    box-shadow: 0 6px 20px rgba($primary, 0.5);
+    box-shadow: $shadow-accent-lg, 0 0 0 3px rgba($accent, 0.15);
   }
 
   &:active {
@@ -284,6 +288,7 @@ watch(chatVisible, (val) => {
     margin-bottom: 16px;
 
     h4 {
+      font-family: $font-sans;
       font-size: 14px;
       font-weight: 600;
       color: $text-primary;
@@ -295,10 +300,12 @@ watch(chatVisible, (val) => {
     font-size: 14px;
     line-height: 1.6;
     color: $text-primary;
-    padding: 12px;
-    background: #f0f9ff;
-    border-radius: 8px;
-    border-left: 3px solid $primary;
+    padding: 14px;
+    background: linear-gradient(135deg, rgba($accent, 0.05), rgba($accent-secondary, 0.02));
+    border-radius: 10px;
+    border-left: 3px solid $accent;
+    border: 1px solid rgba($accent, 0.08);
+    border-left-width: 3px;
   }
 
   .advice-list {
@@ -317,9 +324,9 @@ watch(chatVisible, (val) => {
     align-items: center;
     gap: 8px;
     padding: 12px 16px;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    border-radius: 8px;
+    background: linear-gradient(135deg, rgba($danger, 0.06), rgba($danger, 0.02));
+    border: 1px solid rgba($danger, 0.15);
+    border-radius: 10px;
     color: $danger;
     font-weight: 600;
     font-size: 14px;

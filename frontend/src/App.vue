@@ -16,6 +16,6 @@
 html, body, #app {
   width: 100%;
   height: 100%;
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 </style>

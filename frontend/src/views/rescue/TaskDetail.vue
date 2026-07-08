@@ -274,6 +274,10 @@ onMounted(fetchDetail)
 
 .back-bar {
   margin-bottom: 12px;
+
+  .el-button {
+    &:hover { color: $accent; }
+  }
 }
 
 .detail-header {
@@ -282,8 +286,10 @@ onMounted(fetchDetail)
   align-items: flex-start;
 
   h2 {
+    font-family: $font-sans;
     font-size: 20px;
     font-weight: 700;
+    color: $text-primary;
     margin-bottom: 6px;
   }
 
@@ -302,11 +308,13 @@ onMounted(fetchDetail)
 }
 
 .section-title {
+  font-family: $font-sans;
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 14px;
-  padding-left: 10px;
-  border-left: 3px solid $primary;
+  padding-left: 12px;
+  border-left: 3px solid $accent;
+  color: $text-primary;
 }
 
 .risk-display {
@@ -316,6 +324,7 @@ onMounted(fetchDetail)
     margin-top: 10px;
     font-size: 13px;
     color: $text-secondary;
+    line-height: 1.6;
   }
 }
 
@@ -323,6 +332,7 @@ onMounted(fetchDetail)
   text-align: center;
   color: $text-light;
   padding: 16px;
+  font-size: 13px;
 }
 
 .status-list {
@@ -331,18 +341,26 @@ onMounted(fetchDetail)
 
 .status-actions {
   margin: 4px 0;
+
+  .el-button--large {
+    height: 48px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
 }
 
 .feedback-box {
   margin-top: 12px;
-  padding: 12px;
-  background: #f0fdf4;
-  border-radius: 8px;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba($success, 0.06), rgba($success, 0.02));
+  border: 1px solid rgba($success, 0.12);
+  border-radius: 10px;
 
   p {
     margin-top: 6px;
     font-size: 13px;
     color: $text-primary;
+    line-height: 1.6;
   }
 }
 </style>

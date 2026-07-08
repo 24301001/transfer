@@ -202,11 +202,13 @@ onMounted(() => {
 @use '@/assets/styles/variables' as *;
 
 .section-title {
+  font-family: $font-sans;
   font-size: 15px;
   font-weight: 600;
   margin-bottom: 16px;
-  padding-left: 10px;
-  border-left: 3px solid $primary;
+  padding-left: 12px;
+  border-left: 3px solid $accent;
+  color: $text-primary;
 }
 
 .card-header {
@@ -216,8 +218,10 @@ onMounted(() => {
   margin-bottom: 16px;
 
   h3 {
+    font-family: $font-sans;
     font-size: 16px;
     font-weight: 600;
+    color: $text-primary;
   }
 }
 

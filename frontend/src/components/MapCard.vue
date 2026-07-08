@@ -378,12 +378,17 @@ watch(
 .baidu-map-card {
   position: relative;
   width: 100%;
-  border-radius: $radius-md;
+  border-radius: 10px;
   overflow: hidden;
-  background: #e8f0fe;
+  background: linear-gradient(135deg, rgba($accent, 0.04), rgba($accent-secondary, 0.02));
+  border: 1px solid $border;
 
   &.is-picker {
     cursor: crosshair;
+  }
+
+  &.is-loaded {
+    border-color: transparent;
   }
 }
 
@@ -401,9 +406,9 @@ watch(
   align-items: center;
   justify-content: center;
   z-index: 10;
-  background: #e8f0fe;
-  border: 2px dashed #93c5fd;
-  border-radius: $radius-md;
+  background: linear-gradient(135deg, rgba($accent, 0.04), rgba($accent-secondary, 0.02));
+  border: 2px dashed rgba($accent, 0.2);
+  border-radius: 10px;
 }
 
 .map-placeholder {
@@ -421,8 +426,8 @@ watch(
 }
 
 .map-error-overlay {
-  background: #fef2f2;
-  border-color: #fca5a5;
+  background: linear-gradient(135deg, rgba($danger, 0.04), rgba($danger, 0.02));
+  border-color: rgba($danger, 0.2);
 }
 
 // 位置标签
@@ -435,12 +440,13 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  box-shadow: $shadow-md;
   font-size: 13px;
-  color: $primary;
+  color: $accent;
 
   .tag-text {
     flex: 1;
@@ -456,6 +462,12 @@ watch(
   top: 12px;
   right: 12px;
   z-index: 100;
+
+  .el-button-group .el-button {
+    border-radius: 8px;
+    &:first-child { border-radius: 8px 8px 0 0; }
+    &:last-child { border-radius: 0 0 8px 8px; }
+  }
 }
 
 // 点击提示
@@ -464,21 +476,22 @@ watch(
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.45);
+  padding: 6px 12px;
+  background: linear-gradient(transparent, rgba($text-primary, 0.7));
   color: #fff;
   font-size: 11px;
   text-align: center;
   cursor: pointer;
   z-index: 50;
-  transition: background 0.2s;
+  transition: opacity 0.2s;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.6);
+    opacity: 0.85;
   }
 
   .hint-text {
     opacity: 0.9;
+    font-weight: 500;
   }
 }
 </style>
