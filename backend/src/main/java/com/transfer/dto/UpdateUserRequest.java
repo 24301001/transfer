@@ -5,6 +5,7 @@ import com.transfer.enums.UserStatus;
 
 public record UpdateUserRequest(
         String fullName,
+        String username,
         String phone,
         String email,
         UserRole role,

@@ -16,6 +16,12 @@ public interface UserAccountRepository
 
     Optional<UserAccount> findByUsername(String username);
 
+    long countByStatus(UserStatus status);
+
+    long countByRole(UserRole role);
+
+    long countByRoleAndStatus(UserRole role, UserStatus status);
+
     List<UserAccount> findByRoleInAndStatusOrderByFullNameAsc(
             Collection<UserRole> roles,
             UserStatus status
