@@ -3,7 +3,6 @@ package com.transfer.service;
 import com.transfer.common.BadRequestException;
 import com.transfer.common.PasswordUtils;
 import com.transfer.common.ResourceNotFoundException;
-import com.transfer.dto.CreateUserRequest;
 import com.transfer.dto.RolePermissionResponse;
 import com.transfer.dto.UpdateUserRequest;
 import com.transfer.dto.UserResponse;
@@ -38,39 +37,6 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse findById(Long id) {
         return UserResponse.from(findUser(id));
-    }
-
-    @Transactional
-    public UserResponse create(CreateUserRequest request) {
-        return create(request, null, null);
-    }
-
-    @Transactional
-    public UserResponse create(CreateUserRequest request, Long operatorUserId, String ipAddress) {
-        String username = normalizeRequired(request.username(), "username");
-        if (userAccountRepository.existsByUsername(username)) {
-            throw new BadRequestException("Username already exists: " + username);
-        }
-
-        UserAccount user = new UserAccount();
-        user.setFullName(normalizeRequired(request.fullName(), "fullName"));
-        user.setUsername(username);
-        user.setPhone(normalizeOptional(request.phone()));
-        user.setEmail(normalizeOptional(request.email()));
-        user.setRole(request.role());
-        user.setStatus(request.status() == null ? UserStatus.ENABLED : request.status());
-        user.setPasswordHash(hashPassword(request.password()));
-
-        UserAccount saved = userAccountRepository.save(user);
-        operationLogService.record(
-                operatorUserId,
-                "CREATE_USER",
-                "UserAccount",
-                saved.getId().toString(),
-                ipAddress,
-                saved.getUsername() + ", role=" + saved.getRole() + ", status=" + saved.getStatus()
-        );
-        return UserResponse.from(saved);
     }
 
     @Transactional

@@ -7,10 +7,6 @@
 
     <div class="page-card">
       <div class="toolbar">
-        <el-button type="primary" @click="showDialog = true">
-          <el-icon><Plus /></el-icon>
-          新增用户
-        </el-button>
         <div class="search-bar">
           <el-input v-model="searchKey" placeholder="搜索用户名/姓名" size="small" clearable style="width:200px" />
         </div>
@@ -53,17 +49,14 @@
       </el-table>
     </div>
 
-    <!-- 新增/编辑用户弹窗 -->
-    <el-dialog v-model="showDialog" :title="isEdit ? '编辑用户' : '新增用户'" width="500px">
+    <!-- 编辑用户弹窗 -->
+    <el-dialog v-model="showDialog" title="编辑用户" width="500px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" :disabled="isEdit" />
+          <el-input v-model="form.username" disabled />
         </el-form-item>
         <el-form-item label="姓名" prop="nickname">
           <el-input v-model="form.nickname" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password" v-if="!isEdit">
-          <el-input v-model="form.password" type="password" show-password />
         </el-form-item>
         <el-form-item label="角色" prop="role">
           <el-select v-model="form.role" style="width:100%">
@@ -87,12 +80,10 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { getUserList, updateUser, deleteUser } from '@/services/modules/user'
 import { ROLE_OPTIONS } from '@/utils/role'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
 
 const users = ref([])
 const searchKey = ref('')
 const showDialog = ref(false)
-const isEdit = ref(false)
 const saving = ref(false)
 const formRef = ref(null)
 
@@ -100,15 +91,12 @@ const form = reactive({
   id: null,
   username: '',
   nickname: '',
-  password: '',
   role: '',
   status: '启用',
 })
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   nickname: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
 }
 
@@ -140,11 +128,9 @@ async function fetchUsers() {
 }
 
 function editUser(user) {
-  isEdit.value = true
   form.id = user.id
   form.username = user.username
   form.nickname = user.nickname
-  form.password = ''
   form.role = user.role
   form.status = user.status
   showDialog.value = true
@@ -177,7 +163,7 @@ async function handleSave() {
   try {
     const res = await updateUser({ ...form })
     if (res.code === 200) {
-      ElMessage.success(isEdit.value ? '用户更新成功' : '用户创建成功')
+      ElMessage.success('用户更新成功')
       showDialog.value = false
       fetchUsers()
     }
@@ -192,7 +178,7 @@ onMounted(fetchUsers)
 <style lang="scss" scoped>
 .toolbar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-bottom: 16px;
 }

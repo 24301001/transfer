@@ -62,7 +62,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { ROLES, getRoleByKey } from '@/utils/role'
+import { ROLES } from '@/utils/role'
 import { ElMessageBox } from 'element-plus'
 import {
   WarningFilled,
@@ -73,12 +73,8 @@ import {
   EditPen,
   Monitor,
   Van,
-  Setting,
   Tickets,
-  DataBoard,
   List,
-  TrendCharts,
-  Histogram,
 } from '@element-plus/icons-vue'
 import FloatingBall from '@/components/FloatingBall.vue'
 
@@ -100,10 +96,7 @@ const menuConfig = {
   ],
   [ROLES.ADMIN.key]: [
     { path: '/admin/users', label: '用户管理', icon: User },
-    { path: '/admin/history', label: '事故历史', icon: Histogram },
-    { path: '/admin/data', label: '基础数据', icon: DataBoard },
     { path: '/admin/logs', label: '操作日志', icon: List },
-    { path: '/admin/health', label: '健康状态', icon: TrendCharts },
   ],
 }
 

@@ -74,28 +74,10 @@ const routes = [
         meta: { title: '用户管理', roles: [ROLES.ADMIN.key] },
       },
       {
-        path: 'admin/history',
-        name: 'AdminHistory',
-        component: () => import('@/views/admin/AccidentHistory.vue'),
-        meta: { title: '事故历史', roles: [ROLES.ADMIN.key] },
-      },
-      {
-        path: 'admin/data',
-        name: 'AdminData',
-        component: () => import('@/views/admin/SystemData.vue'),
-        meta: { title: '基础数据', roles: [ROLES.ADMIN.key] },
-      },
-      {
         path: 'admin/logs',
         name: 'AdminLogs',
         component: () => import('@/views/admin/OperationLog.vue'),
         meta: { title: '操作日志', roles: [ROLES.ADMIN.key] },
-      },
-      {
-        path: 'admin/health',
-        name: 'AdminHealth',
-        component: () => import('@/views/admin/HealthStatus.vue'),
-        meta: { title: '健康状态', roles: [ROLES.ADMIN.key] },
       },
     ],
   },
