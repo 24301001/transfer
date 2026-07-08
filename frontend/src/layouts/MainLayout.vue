@@ -52,6 +52,9 @@
     <main class="main-content">
       <router-view />
     </main>
+
+    <!-- 全局悬浮球 AI 助手（仅现场人员可见） -->
+    <FloatingBall v-if="showFloatingBall" />
   </div>
 </template>
 
@@ -77,6 +80,7 @@ import {
   TrendCharts,
   Histogram,
 } from '@element-plus/icons-vue'
+import FloatingBall from '@/components/FloatingBall.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -106,6 +110,9 @@ const menuConfig = {
 const menuItems = computed(() => menuConfig[userStore.role] || [])
 
 const activeMenu = computed(() => route.path)
+
+// 仅现场交警角色显示悬浮球
+const showFloatingBall = computed(() => userStore.role === ROLES.POLICE.key)
 
 const tagType = computed(() => {
   const map = {

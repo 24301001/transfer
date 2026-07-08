@@ -347,9 +347,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
+import { useAiChatContext } from '@/composables/useAiChatContext'
 import { addAccident as apiAddAccident, getAccidentDetail } from '@/services/modules/accident'
 import { reverseGeocode } from '@/services/modules/map'
 import { PRESET_LOCATIONS, getPresetCoords, getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
@@ -372,6 +373,49 @@ const resultVisible = ref(false)
 const adviceVisible = ref(false)
 const result = ref(null)
 const lastSubmission = ref(null)
+
+// ====== 表单数据（必须在 AI 聊天上下文之前定义，避免 TDZ） ======
+const form = reactive({
+  images: [],
+  video: null,
+  locationPreset: null,
+  customLocation: '',
+  locationStr: '',
+  locationName: '',   // 地点名称
+  locationLat: null,  // WGS84 纬度
+  locationLng: null,  // WGS84 经度
+  accidentType: '',
+  description: '',
+})
+
+const rules = {
+  images: [{ required: true, message: '请上传至少一张事故照片', trigger: 'change' }],
+  locationStr: [{ required: true, message: '请在地图上选择事故地点', trigger: 'change' }],
+  description: [{ required: true, message: '请输入事故描述', trigger: 'blur' }],
+  accidentType: [{ required: false }],
+}
+
+// ====== AI 聊天上下文 ======
+const { setContext, resetContext } = useAiChatContext()
+
+function syncChatContext() {
+  setContext({
+    incidentId: lastSubmission.value?.id || null,
+    locationName: form.locationName || form.locationStr || '',
+    description: form.description || '',
+    accidentType: form.accidentType || '',
+  })
+}
+
+onMounted(() => {
+  syncChatContext()
+})
+
+watch(
+  () => [form.locationName, form.description, form.accidentType, lastSubmission.value?.id],
+  syncChatContext,
+  { deep: true }
+)
 
 // 地图中心（BD09 坐标系，用于传递给 MapCard）
 const mapCenter = ref(null)
@@ -483,27 +527,6 @@ function removeVideo() {
   videoBlob.value = null
   videoUrl.value = ''
   videoRef.value = null
-}
-
-// ====== 表单数据 ======
-const form = reactive({
-  images: [],
-  video: null,
-  locationPreset: null,
-  customLocation: '',
-  locationStr: '',
-  locationName: '',   // 地点名称
-  locationLat: null,  // WGS84 纬度
-  locationLng: null,  // WGS84 经度
-  accidentType: '',
-  description: '',
-})
-
-const rules = {
-  images: [{ required: true, message: '请上传至少一张事故照片', trigger: 'change' }],
-  locationStr: [{ required: true, message: '请在地图上选择事故地点', trigger: 'change' }],
-  description: [{ required: true, message: '请输入事故描述', trigger: 'blur' }],
-  accidentType: [{ required: false }],
 }
 
 /** 地图标记 — 给 MapCard 传递 BD09 坐标（百度地图使用） */
