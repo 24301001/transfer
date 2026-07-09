@@ -2,6 +2,7 @@ package com.transfer.service;
 
 import com.transfer.common.BadRequestException;
 import com.transfer.common.ResourceNotFoundException;
+import com.transfer.dto.ClearanceRescueTaskResponse;
 import com.transfer.dto.CommandDispatchRequest;
 import com.transfer.dto.CreateDispatchTaskRequest;
 import com.transfer.dto.DispatchAssignmentRequest;
@@ -10,11 +11,14 @@ import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.NotificationChannel;
 import com.transfer.enums.TaskStatus;
 import com.transfer.enums.TaskType;
+import com.transfer.enums.VehicleStatus;
 import com.transfer.enums.UserStatus;
 import com.transfer.model.DispatchTask;
+import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
 import com.transfer.model.UserAccount;
 import com.transfer.repository.DispatchTaskRepository;
+import com.transfer.repository.EmergencyVehicleRepository;
 import com.transfer.repository.UserAccountRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -42,18 +46,32 @@ public class DispatchTaskService {
     private final DispatchTaskRepository
             dispatchTaskRepository;
 
+    private final EmergencyVehicleRepository
+            emergencyVehicleRepository;
+
     private final UserAccountRepository
             userAccountRepository;
 
     private final IncidentService incidentService;
-    private final NotificationService notificationService;
-    private final OperationLogService operationLogService;
-    private final RealtimeService realtimeService;
+
+    private final MapService mapService;
+
+
+    private final NotificationService
+            notificationService;
+
+    private final OperationLogService
+            operationLogService;
+
+    private final RealtimeService
+            realtimeService;
 
     public DispatchTaskService(
             DispatchTaskRepository dispatchTaskRepository,
+            EmergencyVehicleRepository emergencyVehicleRepository,
             UserAccountRepository userAccountRepository,
             IncidentService incidentService,
+            MapService mapService,
             NotificationService notificationService,
             OperationLogService operationLogService,
             RealtimeService realtimeService
@@ -61,13 +79,27 @@ public class DispatchTaskService {
         this.dispatchTaskRepository =
                 dispatchTaskRepository;
 
+        this.emergencyVehicleRepository =
+                emergencyVehicleRepository;
+
         this.userAccountRepository =
                 userAccountRepository;
 
-        this.incidentService = incidentService;
-        this.notificationService = notificationService;
-        this.operationLogService = operationLogService;
-        this.realtimeService = realtimeService;
+        this.incidentService =
+                incidentService;
+
+        this.mapService =
+                mapService;
+
+
+        this.notificationService =
+                notificationService;
+
+        this.operationLogService =
+                operationLogService;
+
+        this.realtimeService =
+                realtimeService;
     }
 
     /**
@@ -126,10 +158,15 @@ public class DispatchTaskService {
         for (DispatchAssignmentRequest assignment
                 : request.assignments()) {
 
+            /*
+             * 这里只处理指挥人员手动填写的建议。
+             *
+             * 已确认的清障救援建议和事故原有建议，
+             * 统一在 createOne() 中按照优先级处理。
+             */
             String advice = firstNonBlank(
                     assignment.advice(),
-                    request.commonAdvice(),
-                    incident.getSuggestion()
+                    request.commonAdvice()
             );
 
             tasks.add(
@@ -177,10 +214,58 @@ public class DispatchTaskService {
     }
 
     @Transactional(readOnly = true)
+    public List<ClearanceRescueTaskResponse> findMyCurrentTasks(
+            Long receiverUserId
+    ) {
+        return findMyTasksByStatuses(
+                receiverUserId,
+                ACTIVE_STATUSES
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<ClearanceRescueTaskResponse> findMyHistoryTasks(
+            Long receiverUserId
+    ) {
+        return findMyTasksByStatuses(
+                receiverUserId,
+                List.of(
+                        TaskStatus.COMPLETED,
+                        TaskStatus.CANCELLED
+                )
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public DispatchTask findTask(
+            Long taskId
+    ) {
+        return dispatchTaskRepository
+                .findById(taskId)
+                .orElseThrow(
+                        () -> new ResourceNotFoundException(
+                                "Dispatch task not found: "
+                                        + taskId
+                        )
+                );
+    }
+
+    @Transactional(readOnly = true)
+    public ClearanceRescueTaskResponse findTaskDetail(
+            Long taskId
+    ) {
+        return toClearanceRescueTaskResponse(
+                findTask(taskId)
+        );
+    }
+
+    @Transactional(readOnly = true)
     public List<DispatchTask> findByIncidentId(
             Long incidentId
     ) {
-        incidentService.findIncident(incidentId);
+        incidentService.findIncident(
+                incidentId
+        );
 
         return dispatchTaskRepository
                 .findByIncidentIdOrderByCreatedAtDesc(
@@ -203,8 +288,28 @@ public class DispatchTaskService {
                                 )
                         );
 
-        task.setStatus(request.status());
-        task.setFeedback(request.feedback());
+        LocalDateTime now =
+                LocalDateTime.now();
+
+        task.setStatus(
+                request.status()
+        );
+
+        task.setFeedback(
+                request.feedback()
+        );
+
+        if (request.status()
+                == TaskStatus.DEPARTED
+                && task.getDepartedAt() == null) {
+            task.setDepartedAt(now);
+        }
+
+        if ((request.status() == TaskStatus.ARRIVED
+                || request.status() == TaskStatus.PROCESSING)
+                && task.getArrivedAt() == null) {
+            task.setArrivedAt(now);
+        }
 
         if (request.status()
                 == TaskStatus.PROCESSING) {
@@ -216,9 +321,7 @@ public class DispatchTaskService {
 
         if (request.status()
                 == TaskStatus.COMPLETED) {
-            task.setCompletedAt(
-                    LocalDateTime.now()
-            );
+            task.setCompletedAt(now);
 
             incidentService.updateStatus(
                     task.getIncidentId(),
@@ -226,8 +329,15 @@ public class DispatchTaskService {
             );
         }
 
+        syncEmergencyVehicleStatus(
+                task,
+                request.status()
+        );
+
         DispatchTask saved =
-                dispatchTaskRepository.save(task);
+                dispatchTaskRepository.save(
+                        task
+                );
 
         operationLogService.record(
                 task.getReceiverUserId(),
@@ -271,7 +381,9 @@ public class DispatchTaskService {
         }
 
         if (receiverUserId != null) {
-            validateReceiver(receiverUserId);
+            validateReceiver(
+                    receiverUserId
+            );
 
             boolean duplicate =
                     dispatchTaskRepository
@@ -294,13 +406,17 @@ public class DispatchTaskService {
         DispatchTask task =
                 new DispatchTask();
 
-        task.setTaskNo(generateTaskNo());
+        task.setTaskNo(
+                generateTaskNo()
+        );
 
         task.setIncidentId(
                 incident.getId()
         );
 
-        task.setTaskType(taskType);
+        task.setTaskType(
+                taskType
+        );
 
         task.setReceiverUserId(
                 receiverUserId
@@ -311,11 +427,15 @@ public class DispatchTaskService {
         );
 
         task.setVehicleRequired(
-                Boolean.TRUE.equals(vehicleRequired)
+                Boolean.TRUE.equals(
+                        vehicleRequired
+                )
         );
 
         task.setVehicleType(
-                trimToNull(vehicleType)
+                trimToNull(
+                        vehicleType
+                )
         );
 
         task.setLocationName(
@@ -328,7 +448,16 @@ public class DispatchTaskService {
 
         task.setAdvice(
                 firstNonBlank(
+                        /*
+                         * 指挥人员在创建调度任务时
+                         * 手动输入的任务说明优先。
+                         */
                         advice,
+
+                        /*
+                         * 这里不再自动接入 AI 清障处置建议。
+                         * 如需任务说明，由指挥中心人工填写。
+                         */
                         incident.getSuggestion()
                 )
         );
@@ -338,7 +467,9 @@ public class DispatchTaskService {
         );
 
         DispatchTask saved =
-                dispatchTaskRepository.save(task);
+                dispatchTaskRepository.save(
+                        task
+                );
 
         if (receiverUserId != null) {
             notificationService.send(
@@ -378,12 +509,141 @@ public class DispatchTaskService {
         return saved;
     }
 
+    private List<ClearanceRescueTaskResponse> findMyTasksByStatuses(
+            Long receiverUserId,
+            List<TaskStatus> statuses
+    ) {
+        List<DispatchTask> tasks =
+                receiverUserId == null
+                        ? dispatchTaskRepository
+                        .findByStatusInOrderByCreatedAtDesc(
+                                statuses
+                        )
+                        : dispatchTaskRepository
+                        .findByReceiverUserIdAndStatusInOrderByCreatedAtDesc(
+                                receiverUserId,
+                                statuses
+                        );
+
+        return tasks.stream()
+                .map(this::toClearanceRescueTaskResponse)
+                .toList();
+    }
+
+    private ClearanceRescueTaskResponse toClearanceRescueTaskResponse(
+            DispatchTask task
+    ) {
+        Incident incident =
+                incidentService.findIncident(
+                        task.getIncidentId()
+                );
+
+        return ClearanceRescueTaskResponse.from(
+                task,
+                incident,
+                mapService.fromStoredIncident(
+                        incident,
+                        incident.getBaiduLongitude() == null
+                                ? "尚未生成百度地图坐标"
+                                : "已生成百度地图坐标"
+                ),
+                null
+        );
+    }
+
+    private void syncEmergencyVehicleStatus(
+            DispatchTask task,
+            TaskStatus status
+    ) {
+        if (task.getEmergencyVehicleId() == null) {
+            return;
+        }
+
+        EmergencyVehicle vehicle =
+                emergencyVehicleRepository
+                        .findById(
+                                task.getEmergencyVehicleId()
+                        )
+                        .orElse(null);
+
+        if (vehicle == null) {
+            return;
+        }
+
+        switch (status) {
+            case DISPATCHED ->
+                    vehicle.setStatus(
+                            VehicleStatus.DISPATCHED
+                    );
+
+            case DEPARTED ->
+                    vehicle.setStatus(
+                            VehicleStatus.EN_ROUTE
+                    );
+
+            case ARRIVED, PROCESSING -> {
+                vehicle.setStatus(
+                        VehicleStatus.ARRIVED
+                );
+                moveVehicleToIncidentTarget(
+                        vehicle,
+                        task
+                );
+            }
+
+            case COMPLETED, CANCELLED -> {
+                vehicle.setStatus(
+                        VehicleStatus.AVAILABLE
+                );
+                vehicle.setCurrentTaskId(null);
+                moveVehicleToIncidentTarget(
+                        vehicle,
+                        task
+                );
+            }
+        }
+
+        emergencyVehicleRepository.save(vehicle);
+    }
+
+    private void moveVehicleToIncidentTarget(
+            EmergencyVehicle vehicle,
+            DispatchTask task
+    ) {
+        if (task.getIncidentTargetLongitude() != null) {
+            vehicle.setLongitude(
+                    task.getIncidentTargetLongitude()
+            );
+        }
+
+        if (task.getIncidentTargetLatitude() != null) {
+            vehicle.setLatitude(
+                    task.getIncidentTargetLatitude()
+            );
+        }
+
+        if (task.getIncidentTargetBaiduLongitude() != null) {
+            vehicle.setBaiduLongitude(
+                    task.getIncidentTargetBaiduLongitude()
+            );
+        }
+
+        if (task.getIncidentTargetBaiduLatitude() != null) {
+            vehicle.setBaiduLatitude(
+                    task.getIncidentTargetBaiduLatitude()
+            );
+        }
+    }
+
+
     private UserAccount validateReceiver(
             Long receiverUserId
     ) {
         UserAccount user =
                 userAccountRepository
-                        .findById(receiverUserId)
+                        .findById(
+                                receiverUserId
+                        )
                         .orElseThrow(
                                 () -> new ResourceNotFoundException(
                                         "Receiver user not found: "
@@ -431,7 +691,9 @@ public class DispatchTaskService {
         return null;
     }
 
-    private String trimToNull(String value) {
+    private String trimToNull(
+            String value
+    ) {
         return value == null
                 || value.trim().isEmpty()
                 ? null

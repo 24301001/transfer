@@ -1,5 +1,6 @@
 package com.transfer.controller;
 
+import com.transfer.dto.ClearanceRescueTaskResponse;
 import com.transfer.dto.CreateDispatchTaskRequest;
 import com.transfer.dto.UpdateTaskStatusRequest;
 import com.transfer.model.DispatchTask;
@@ -48,6 +49,34 @@ public class DispatchTaskController {
     ) {
         Long receiverUserId = queryUserId != null ? queryUserId : headerUserId;
         return dispatchTaskService.findMyTasks(receiverUserId);
+    }
+
+    @GetMapping("/my/current")
+    public List<ClearanceRescueTaskResponse> findMyCurrentTasks(
+            @RequestHeader(value = "X-User-Id", required = false) Long headerUserId,
+            @RequestParam(value = "receiverUserId", required = false) Long queryUserId
+    ) {
+        Long receiverUserId = queryUserId != null ? queryUserId : headerUserId;
+        return dispatchTaskService.findMyCurrentTasks(receiverUserId);
+    }
+
+    @GetMapping("/my/history")
+    public List<ClearanceRescueTaskResponse> findMyHistoryTasks(
+            @RequestHeader(value = "X-User-Id", required = false) Long headerUserId,
+            @RequestParam(value = "receiverUserId", required = false) Long queryUserId
+    ) {
+        Long receiverUserId = queryUserId != null ? queryUserId : headerUserId;
+        return dispatchTaskService.findMyHistoryTasks(receiverUserId);
+    }
+
+    @GetMapping("/{taskId}")
+    public DispatchTask findTask(@PathVariable Long taskId) {
+        return dispatchTaskService.findTask(taskId);
+    }
+
+    @GetMapping("/{taskId}/clearance-rescue-detail")
+    public ClearanceRescueTaskResponse findClearanceRescueTaskDetail(@PathVariable Long taskId) {
+        return dispatchTaskService.findTaskDetail(taskId);
     }
 
     @PutMapping("/{taskId}/status")

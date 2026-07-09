@@ -8,15 +8,19 @@ import com.transfer.dto.UpdateVehicleLocationRequest;
 import com.transfer.dto.VehicleEtaResponse;
 import com.transfer.dto.VehicleTrackResponse;
 import com.transfer.enums.CoordinateType;
+import com.transfer.enums.IncidentStatus;
+import com.transfer.enums.NotificationChannel;
 import com.transfer.enums.TaskStatus;
 import com.transfer.enums.TaskType;
 import com.transfer.enums.VehicleStatus;
 import com.transfer.enums.VehicleType;
+import com.transfer.enums.UserStatus;
 import com.transfer.model.DispatchTask;
 import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
 import com.transfer.repository.DispatchTaskRepository;
 import com.transfer.repository.EmergencyVehicleRepository;
+import com.transfer.repository.UserAccountRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,33 +42,31 @@ public class EmergencyVehicleDispatchService {
      */
     private static final double ROAD_FACTOR = 1.25;
 
-    private static final List<TaskStatus> ACTIVE_TASK_STATUSES =
-            List.of(
-                    TaskStatus.DISPATCHED,
-                    TaskStatus.DEPARTED,
-                    TaskStatus.ARRIVED,
-                    TaskStatus.PROCESSING
-            );
-
     private final EmergencyVehicleRepository vehicleRepository;
     private final DispatchTaskRepository dispatchTaskRepository;
+    private final UserAccountRepository userAccountRepository;
     private final IncidentService incidentService;
     private final MapService mapService;
+    private final NotificationService notificationService;
     private final OperationLogService operationLogService;
     private final RealtimeService realtimeService;
 
     public EmergencyVehicleDispatchService(
             EmergencyVehicleRepository vehicleRepository,
             DispatchTaskRepository dispatchTaskRepository,
+            UserAccountRepository userAccountRepository,
             IncidentService incidentService,
             MapService mapService,
+            NotificationService notificationService,
             OperationLogService operationLogService,
             RealtimeService realtimeService
     ) {
         this.vehicleRepository = vehicleRepository;
         this.dispatchTaskRepository = dispatchTaskRepository;
+        this.userAccountRepository = userAccountRepository;
         this.incidentService = incidentService;
         this.mapService = mapService;
+        this.notificationService = notificationService;
         this.operationLogService = operationLogService;
         this.realtimeService = realtimeService;
     }
@@ -197,7 +199,8 @@ public class EmergencyVehicleDispatchService {
     /**
      * 调度车辆。
      *
-     * vehicleId 为空时，自动调度最快可达车辆。
+     * 后端只根据距离 ÷ 速度计算 ETA 并展示，
+     * 车辆必须由指挥人员在 ETA 列表中手动选择。
      */
     @Transactional
     public DispatchTask dispatchVehicle(
@@ -216,18 +219,23 @@ public class EmergencyVehicleDispatchService {
             );
         }
 
+        if (request.vehicleId() == null) {
+            throw new BadRequestException(
+                    "必须由指挥中心在 ETA 列表中手动选择车辆，vehicleId is required"
+            );
+        }
+
+        if (request.receiverUserId() != null) {
+            validateReceiver(request.receiverUserId());
+        }
+
         Incident incident =
                 incidentService.findIncident(incidentId);
 
         ensureIncidentCoordinate(incident);
 
         EmergencyVehicle vehicle =
-                request.vehicleId() == null
-                        ? findFastestAvailableVehicle(
-                        incident,
-                        request.vehicleType()
-                )
-                        : findSelectedVehicle(
+                findSelectedVehicle(
                         request.vehicleId(),
                         request.vehicleType()
                 );
@@ -257,9 +265,6 @@ public class EmergencyVehicleDispatchService {
                         speedKmh
                 );
 
-        LocalDateTime now =
-                LocalDateTime.now();
-
         DispatchTask task =
                 new DispatchTask();
 
@@ -271,14 +276,15 @@ public class EmergencyVehicleDispatchService {
                 incident.getId()
         );
 
-        task.setTaskType(
+        TaskType taskType =
                 toTaskType(
                         vehicle.getVehicleType()
-                )
-        );
+                );
+
+        task.setTaskType(taskType);
 
         task.setReceiverUserId(
-                null
+                request.receiverUserId()
         );
 
         task.setAssignedByUserId(
@@ -286,7 +292,7 @@ public class EmergencyVehicleDispatchService {
         );
 
         task.setStatus(
-                TaskStatus.DEPARTED
+                TaskStatus.DISPATCHED
         );
 
         task.setVehicleRequired(
@@ -308,7 +314,7 @@ public class EmergencyVehicleDispatchService {
         task.setAdvice(
                 firstNonBlank(
                         request.advice(),
-                        "已自动调度预计最快到达的"
+                        "指挥中心已手动调度"
                                 + displayVehicleType(
                                 vehicle.getVehicleType()
                         )
@@ -376,15 +382,11 @@ public class EmergencyVehicleDispatchService {
                 etaMinutes
         );
 
-        task.setDepartedAt(
-                now
-        );
-
         DispatchTask saved =
                 dispatchTaskRepository.save(task);
 
         vehicle.setStatus(
-                VehicleStatus.EN_ROUTE
+                VehicleStatus.DISPATCHED
         );
 
         vehicle.setCurrentTaskId(
@@ -393,9 +395,27 @@ public class EmergencyVehicleDispatchService {
 
         vehicleRepository.save(vehicle);
 
+        incidentService.updateStatus(
+                incident.getId(),
+                IncidentStatus.DISPATCHED
+        );
+
+        if (request.receiverUserId() != null) {
+            notificationService.send(
+                    request.receiverUserId(),
+                    NotificationChannel.SYSTEM,
+                    "新的清障救援任务",
+                    "任务 "
+                            + saved.getTaskNo()
+                            + "，事故编号 "
+                            + incident.getIncidentNo()
+                            + "，请根据任务详情和导航信息前往现场。"
+            );
+        }
+
         operationLogService.record(
                 request.assignedByUserId(),
-                "DISPATCH_EMERGENCY_VEHICLE",
+                "DISPATCH_EMERGENCY_VEHICLE_MANUAL",
                 "DispatchTask",
                 saved.getId().toString(),
                 null,
@@ -474,6 +494,11 @@ public class EmergencyVehicleDispatchService {
                         ? task.getCreatedAt()
                         : task.getDepartedAt();
 
+        if (task.getStatus() == TaskStatus.DISPATCHED
+                && task.getDepartedAt() == null) {
+            startTime = now;
+        }
+
         if (startTime == null) {
             startTime = now;
         }
@@ -507,7 +532,13 @@ public class EmergencyVehicleDispatchService {
                         elapsedSeconds / totalSeconds
                 );
 
+        if (task.getStatus() == TaskStatus.DISPATCHED
+                && task.getDepartedAt() == null) {
+            progress = 0.0;
+        }
+
         if (task.getStatus() == TaskStatus.ARRIVED
+                || task.getStatus() == TaskStatus.PROCESSING
                 || task.getStatus() == TaskStatus.COMPLETED) {
             progress = 1.0;
         }
@@ -567,6 +598,7 @@ public class EmergencyVehicleDispatchService {
 
         if (progress >= 1.0
                 && task.getStatus() != TaskStatus.ARRIVED
+                && task.getStatus() != TaskStatus.PROCESSING
                 && task.getStatus() != TaskStatus.COMPLETED) {
 
             task.setStatus(
@@ -632,11 +664,11 @@ public class EmergencyVehicleDispatchService {
                 totalMinutes,
                 remainingMinutes,
 
-                progress >= 1.0
-                        ? "车辆已到达事故现场"
-                        : "车辆正在赶往事故现场，预计还需 "
-                        + remainingMinutes
-                        + " 分钟"
+                buildTrackMessage(
+                        task,
+                        progress,
+                        remainingMinutes
+                )
         );
     }
 
@@ -737,34 +769,23 @@ public class EmergencyVehicleDispatchService {
         return saved;
     }
 
-    private EmergencyVehicle findFastestAvailableVehicle(
-            Incident incident,
-            VehicleType vehicleType
+    private String buildTrackMessage(
+            DispatchTask task,
+            double progress,
+            int remainingMinutes
     ) {
-        List<EmergencyVehicle> vehicles =
-                vehicleRepository
-                        .findByVehicleTypeAndStatusOrderByVehicleNoAsc(
-                                vehicleType,
-                                VehicleStatus.AVAILABLE
-                        );
+        if (task.getStatus() == TaskStatus.DISPATCHED
+                && task.getDepartedAt() == null) {
+            return "车辆已由指挥中心手动调度，等待清障/救援人员反馈已出发";
+        }
 
-        return vehicles.stream()
-                .filter(this::hasCoordinate)
-                .min(
-                        Comparator.comparingInt(
-                                vehicle -> buildEtaResponse(
-                                        incident,
-                                        vehicle,
-                                        false
-                                ).estimatedArrivalMinutes()
-                        )
-                )
-                .orElseThrow(
-                        () -> new ResourceNotFoundException(
-                                "No available vehicle for type: "
-                                        + vehicleType
-                        )
-                );
+        if (progress >= 1.0) {
+            return "车辆已到达事故现场";
+        }
+
+        return "车辆正在赶往事故现场，预计还需 "
+                + remainingMinutes
+                + " 分钟";
     }
 
     private EmergencyVehicle findSelectedVehicle(
@@ -1055,6 +1076,22 @@ public class EmergencyVehicleDispatchService {
 
         return start + (end - start) * progress;
     }
+
+    private void validateReceiver(
+            Long receiverUserId
+    ) {
+        userAccountRepository
+                .findById(receiverUserId)
+                .filter(user -> user.getStatus()
+                        == UserStatus.ENABLED)
+                .orElseThrow(
+                        () -> new BadRequestException(
+                                "Receiver user is not available: "
+                                        + receiverUserId
+                        )
+                );
+    }
+
 
     private String generateTaskNo() {
         return "TASK"

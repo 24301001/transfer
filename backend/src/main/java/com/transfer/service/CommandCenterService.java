@@ -6,6 +6,7 @@ import com.transfer.dto.CommandIncidentDetailResponse;
 import com.transfer.dto.CommandIncidentSummaryResponse;
 import com.transfer.dto.IncidentMapMarkerResponse;
 import com.transfer.dto.MapLocationResponse;
+import com.transfer.dto.PredictionDisplayResponse;
 import com.transfer.dto.ResponderResponse;
 import com.transfer.dto.SupportDecisionRequest;
 import com.transfer.enums.IncidentStatus;
@@ -29,7 +30,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.transfer.dto.ClearanceRescueAdviceResponse;
+import com.transfer.dto.ConfirmClearanceRescueAdviceRequest;
 
+import java.util.Optional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +65,9 @@ public class CommandCenterService {
     private final DispatchTaskService dispatchTaskService;
     private final MapService mapService;
 
+    private final ClearanceRescueAdviceService
+            clearanceRescueAdviceService;
+
     private final OperationLogService operationLogService;
     private final RealtimeService realtimeService;
 
@@ -73,6 +80,7 @@ public class CommandCenterService {
             IncidentService incidentService,
             DispatchTaskService dispatchTaskService,
             MapService mapService,
+            ClearanceRescueAdviceService clearanceRescueAdviceService,
             OperationLogService operationLogService,
             RealtimeService realtimeService
     ) {
@@ -89,6 +97,8 @@ public class CommandCenterService {
         this.dispatchTaskService =
                 dispatchTaskService;
         this.mapService = mapService;
+        this.clearanceRescueAdviceService =
+                clearanceRescueAdviceService;
         this.operationLogService =
                 operationLogService;
         this.realtimeService = realtimeService;
@@ -286,6 +296,80 @@ public class CommandCenterService {
         );
 
         return saved;
+    }
+
+    /**
+     * 指挥中心查看最新预测结果表和自然语言解释。
+     */
+    @Transactional(readOnly = true)
+    public PredictionDisplayResponse findLatestPredictionResult(
+            Long incidentId
+    ) {
+        return incidentService.findLatestPrediction(
+                incidentId
+        );
+    }
+
+    /**
+     * 指挥中心手动调用 AI，基于最新预测结果生成自然语言解释。
+     */
+    @Transactional
+    public PredictionDisplayResponse regeneratePredictionExplanation(
+            Long incidentId,
+            Long operatorUserId
+    ) {
+        return incidentService
+                .regenerateLatestPredictionExplanation(
+                        incidentId,
+                        operatorUserId
+                );
+    }
+
+    /**
+     * 查询事故最新的清障救援建议。
+     *
+     * 该能力保留给后续清障救援模块复用，
+     * 指挥中心接口不再直接暴露该清障建议流程。
+     */
+    @Transactional(readOnly = true)
+    public Optional<ClearanceRescueAdviceResponse>
+    findLatestClearanceRescueAdvice(
+            Long incidentId
+    ) {
+        return clearanceRescueAdviceService
+                .findLatest(incidentId);
+    }
+
+    /**
+     * 指挥人员手动重新生成建议。
+     */
+    @Transactional
+    public ClearanceRescueAdviceResponse
+    regenerateClearanceRescueAdvice(
+            Long incidentId,
+            Long operatorUserId
+    ) {
+        return clearanceRescueAdviceService
+                .generateLatestDraft(
+                        incidentId,
+                        operatorUserId
+                );
+    }
+
+    /**
+     * 由指挥中心审核修改后确认。
+     */
+    @Transactional
+    public ClearanceRescueAdviceResponse
+    confirmClearanceRescueAdvice(
+            Long incidentId,
+            ConfirmClearanceRescueAdviceRequest request
+    ) {
+        return clearanceRescueAdviceService
+                .confirm(
+                        incidentId,
+                        request
+                );
     }
 
     /**
@@ -598,3 +682,4 @@ public class CommandCenterService {
         return null;
     }
 }
+

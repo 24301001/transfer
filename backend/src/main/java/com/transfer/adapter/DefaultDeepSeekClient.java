@@ -45,7 +45,7 @@ public class DefaultDeepSeekClient implements DeepSeekClient {
                     "messages", List.of(
                             Map.of(
                                     "role", "system",
-                                    "content", "你是交通事故处置辅助系统的说明生成助手。请根据结构化预测结果，生成简洁、客观、适合交警查看的中文说明。不要编造未提供的信息。"
+                                    "content", "你是交通事故风险预测结果说明生成助手。请根据结构化预测结果，生成简洁、客观、适合指挥人员查看的中文自然语言解释。只解释模型预测结论和依据，不输出调度方案或处置建议，不编造未提供的信息。"
                             ),
                             Map.of(
                                     "role", "user",
@@ -68,11 +68,12 @@ public class DefaultDeepSeekClient implements DeepSeekClient {
 
     private String buildPrompt(PredictionOutcome outcome, String locationName, String description) {
         return """
-                请将以下交通事故预测结果转换为自然语言解释，要求：
-                1. 说明事故类型、风险等级、拥堵持续时间、道路恢复时间；
-                2. 简要解释为什么需要采取这些处置建议；
-                3. 语气专业、简洁，适合交警用户查看；
-                4. 不要输出 JSON。
+                请将以下交通事故模型预测结果转换为自然语言解释，要求：
+                1. 说明事故类型、风险等级、风险分数或可信度、预计拥堵持续时间、预计道路恢复时间；
+                2. 解释这些预测结论主要由哪些风险因素、现场信息或证据支持；
+                3. 只解释模型结果，不输出调度方案、清障方案、处置步骤或“建议调度某车辆”等内容；
+                4. 语气专业、简洁，适合指挥中心人员查看；
+                5. 不要输出 JSON、Markdown 表格或代码块。
 
                 事故地点：%s
                 事故描述：%s
@@ -82,7 +83,6 @@ public class DefaultDeepSeekClient implements DeepSeekClient {
                 道路恢复时间：%s 分钟
                 可信度：%s
                 模型版本：%s
-                处置建议：%s
                 风险因素：%s
                 证据摘要：%s
                 """.formatted(
@@ -94,7 +94,6 @@ public class DefaultDeepSeekClient implements DeepSeekClient {
                 outcome.recoveryDurationMinutes(),
                 outcome.confidence(),
                 safe(outcome.modelVersion()),
-                safe(outcome.suggestions()),
                 outcome.riskFactors() == null ? "未提供" : outcome.riskFactors(),
                 safe(outcome.evidenceSummary())
         );
@@ -125,8 +124,13 @@ public class DefaultDeepSeekClient implements DeepSeekClient {
                 + outcome.congestionDurationMinutes()
                 + " 分钟，道路恢复正常通行约需 "
                 + outcome.recoveryDurationMinutes()
-                + " 分钟。初步处置建议："
-                + safe(outcome.suggestions());
+                + " 分钟，模型可信度为 "
+                + outcome.confidence()
+                + "。主要风险因素："
+                + (outcome.riskFactors() == null || outcome.riskFactors().isEmpty()
+                ? "未提供"
+                : outcome.riskFactors())
+                + "。";
     }
 
     private String safe(String value) {

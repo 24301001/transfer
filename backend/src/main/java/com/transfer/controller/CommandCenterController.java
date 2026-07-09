@@ -6,6 +6,7 @@ import com.transfer.dto.CommandIncidentSummaryResponse;
 import com.transfer.dto.DispatchVehicleRequest;
 import com.transfer.dto.IncidentMapMarkerResponse;
 import com.transfer.dto.MapLocationResponse;
+import com.transfer.dto.PredictionDisplayResponse;
 import com.transfer.dto.ResponderResponse;
 import com.transfer.dto.SupportDecisionRequest;
 import com.transfer.dto.UpdateVehicleLocationRequest;
@@ -165,6 +166,46 @@ public class CommandCenterController {
     }
 
     /**
+     * 指挥中心查看最新预测结果表。
+     *
+     * 返回内容包含模型直接预测结果，以及硅基流动生成的自然语言解释 explanation。
+     */
+    @GetMapping(
+            "/incidents/{incidentId}/prediction-result/latest"
+    )
+    public PredictionDisplayResponse findLatestPredictionResult(
+            @PathVariable
+            Long incidentId
+    ) {
+        return commandCenterService
+                .findLatestPredictionResult(
+                        incidentId
+                );
+    }
+
+    /**
+     * 指挥中心手动调用 AI，基于最新预测结果生成自然语言解释。
+     *
+     * 该接口不生成清障处置建议，也不参与车辆调度决策。
+     */
+    @PostMapping(
+            "/incidents/{incidentId}/prediction-explanation/generate"
+    )
+    public PredictionDisplayResponse regeneratePredictionExplanation(
+            @PathVariable
+            Long incidentId,
+
+            @RequestParam(required = false)
+            Long operatorUserId
+    ) {
+        return commandCenterService
+                .regeneratePredictionExplanation(
+                        incidentId,
+                        operatorUserId
+                );
+    }
+
+    /**
      * FR-19：原有调度处理。
      */
     @PostMapping(
@@ -273,7 +314,8 @@ public class CommandCenterController {
     /**
      * 调度救护车/清障车。
      *
-     * vehicleId 不传时，后端自动选择最快到达车辆。
+     * 指挥中心先查看 ETA 列表，再手动选择 vehicleId 调度。
+     * 后端不做 AI 调度，也不自动选择最快车辆。
      */
     @PostMapping(
             "/incidents/{incidentId}/vehicle-dispatch"

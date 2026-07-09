@@ -13,10 +13,16 @@ public record DispatchVehicleRequest(
         VehicleType vehicleType,
 
         /**
-         * 可选。
-         * 不传 vehicleId 时，后端自动选择预计最快到达的车辆。
+         * 指挥中心必须从 ETA 列表中手动选择车辆。
+         * 后端不再自动选择最快车辆。
          */
+        @NotNull
         Long vehicleId,
+
+        /**
+         * 接收该任务的清障/救援人员ID。
+         */
+        Long receiverUserId,
 
         /**
          * 指挥中心调度人员ID。

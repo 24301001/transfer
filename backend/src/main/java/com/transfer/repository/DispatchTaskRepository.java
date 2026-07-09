@@ -18,6 +18,17 @@ public interface DispatchTaskRepository
     );
 
     List<DispatchTask>
+    findByReceiverUserIdAndStatusInOrderByCreatedAtDesc(
+            Long receiverUserId,
+            Collection<TaskStatus> statuses
+    );
+
+    List<DispatchTask>
+    findByStatusInOrderByCreatedAtDesc(
+            Collection<TaskStatus> statuses
+    );
+
+    List<DispatchTask>
     findByIncidentIdOrderByCreatedAtDesc(
             Long incidentId
     );

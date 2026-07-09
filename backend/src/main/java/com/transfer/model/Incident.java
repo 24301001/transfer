@@ -75,16 +75,6 @@ public class Incident extends AuditableEntity {
 
     private Integer peopleFlow;
 
-    /** 事故涉及人数 */
-    private Integer peopleInvolved;
-
-    /** 受伤人数 */
-    private Integer injuredCount;
-
-    /** 预计受伤情况描述，如"轻伤1人，重伤0人" */
-    @Column(length = 500)
-    private String injuryEstimate;
-
     @Column(length = 40)
     private String weather;
 
@@ -290,30 +280,6 @@ public class Incident extends AuditableEntity {
 
     public void setPeopleFlow(Integer peopleFlow) {
         this.peopleFlow = peopleFlow;
-    }
-
-    public Integer getPeopleInvolved() {
-        return peopleInvolved;
-    }
-
-    public void setPeopleInvolved(Integer peopleInvolved) {
-        this.peopleInvolved = peopleInvolved;
-    }
-
-    public Integer getInjuredCount() {
-        return injuredCount;
-    }
-
-    public void setInjuredCount(Integer injuredCount) {
-        this.injuredCount = injuredCount;
-    }
-
-    public String getInjuryEstimate() {
-        return injuryEstimate;
-    }
-
-    public void setInjuryEstimate(String injuryEstimate) {
-        this.injuryEstimate = injuryEstimate;
     }
 
     public String getWeather() {

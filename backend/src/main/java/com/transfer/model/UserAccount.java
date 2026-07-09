@@ -32,9 +32,6 @@ public class UserAccount extends AuditableEntity {
     @Column(nullable = false, length = 32)
     private UserStatus status = UserStatus.ENABLED;
 
-    /** 所属清障/救援中心 */
-    private Long rescueCenterId;
-
     @Column(nullable = false)
     private String passwordHash;
 
@@ -84,14 +81,6 @@ public class UserAccount extends AuditableEntity {
 
     public void setStatus(UserStatus status) {
         this.status = status;
-    }
-
-    public Long getRescueCenterId() {
-        return rescueCenterId;
-    }
-
-    public void setRescueCenterId(Long rescueCenterId) {
-        this.rescueCenterId = rescueCenterId;
     }
 
     public String getPasswordHash() {

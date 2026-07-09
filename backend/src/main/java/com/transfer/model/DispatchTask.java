@@ -29,9 +29,6 @@ public class DispatchTask extends AuditableEntity {
 
     private Long assignedByUserId;
 
-    /** 清障中心主键 */
-    private Long rescueCenterId;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private TaskStatus status = TaskStatus.DISPATCHED;
@@ -131,14 +128,6 @@ public class DispatchTask extends AuditableEntity {
 
     public void setAssignedByUserId(Long assignedByUserId) {
         this.assignedByUserId = assignedByUserId;
-    }
-
-    public Long getRescueCenterId() {
-        return rescueCenterId;
-    }
-
-    public void setRescueCenterId(Long rescueCenterId) {
-        this.rescueCenterId = rescueCenterId;
     }
 
     public TaskStatus getStatus() {
