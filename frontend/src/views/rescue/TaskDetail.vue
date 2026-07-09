@@ -48,6 +48,7 @@
               :center="mapCenter"
               :zoom="15"
               style="margin-top:12px;"
+              @click="handleNavigate"
             />
 
             <!-- 关联事故详情 -->
@@ -173,7 +174,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useDispatchStore } from '@/stores/dispatch'
-import { getDispatchDetail, updateDispatchStatus } from '@/services/modules/dispatch'
+import { getDispatchDetail, updateDispatchStatus, getClearanceRescueDetail } from '@/services/modules/dispatch'
 import { wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, LocationFilled, Van, Tools, CircleCheck } from '@element-plus/icons-vue'
@@ -228,6 +229,25 @@ async function fetchDetail() {
     }
   } finally {
     loading.value = false
+  }
+}
+
+/** 点击「点击查看导航」→ 调接口获取导航链接并跳转 */
+async function handleNavigate() {
+  if (!route.params.id) return
+  const loadingMsg = ElMessage.info('正在获取导航链接…')
+  try {
+    const res = await getClearanceRescueDetail(route.params.id)
+    if (res.code === 200 && res.data?.navigationUrl) {
+      window.open(res.data.navigationUrl, '_blank')
+    } else {
+      ElMessage.warning('暂无导航链接')
+    }
+  } catch (e) {
+    console.error('[TaskDetail] 获取导航链接失败:', e)
+    ElMessage.error('获取导航链接失败')
+  } finally {
+    loadingMsg.close()
   }
 }
 

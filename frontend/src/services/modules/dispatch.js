@@ -204,6 +204,17 @@ export async function createDispatch(data) {
 }
 
 /**
+ * 获取清障救援任务详情（含导航链接）
+ * GET /api/v1/dispatch-tasks/{taskId}/clearance-rescue-detail
+ * @param {number} taskId
+ * @returns {Promise<{code: number, data: object}>}
+ */
+export async function getClearanceRescueDetail(taskId) {
+  const res = await request.get(`/v1/dispatch-tasks/${taskId}/clearance-rescue-detail`)
+  return { code: 200, data: res.data }
+}
+
+/**
  * 更新调度任务状态
  * PUT /api/v1/dispatch-tasks/{id}/status
  * @param {{ id: number, status: string, feedback?: string }} data
