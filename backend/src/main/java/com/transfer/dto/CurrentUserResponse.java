@@ -10,6 +10,7 @@ public record CurrentUserResponse(
         String username,
         String phone,
         String email,
+        Boolean emailVerified,
         UserRole role,
         UserStatus status
 ) {
@@ -20,6 +21,7 @@ public record CurrentUserResponse(
                 user.getUsername(),
                 user.getPhone(),
                 user.getEmail(),
+                user.getEmailVerified(),
                 user.getRole(),
                 user.getStatus()
         );

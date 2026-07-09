@@ -14,7 +14,11 @@ public interface UserAccountRepository
 
     boolean existsByUsername(String username);
 
+    boolean existsByEmail(String email);
+
     Optional<UserAccount> findByUsername(String username);
+
+    Optional<UserAccount> findByEmail(String email);
 
     long countByStatus(UserStatus status);
 

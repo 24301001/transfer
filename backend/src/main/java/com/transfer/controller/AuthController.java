@@ -1,8 +1,13 @@
 package com.transfer.controller;
 
+import com.transfer.dto.CaptchaResponse;
 import com.transfer.dto.CurrentUserResponse;
+import com.transfer.dto.EmailCodeRequest;
+import com.transfer.dto.EmailCodeResponse;
 import com.transfer.dto.LoginRequest;
 import com.transfer.dto.LoginResponse;
+import com.transfer.dto.MessageResponse;
+import com.transfer.dto.PasswordResetRequest;
 import com.transfer.dto.RegisterRequest;
 import com.transfer.service.AuthService;
 import jakarta.validation.Valid;
@@ -25,6 +30,16 @@ public class AuthController {
         this.authService = authService;
     }
 
+    @GetMapping("/captcha")
+    public CaptchaResponse captcha() {
+        return authService.captcha();
+    }
+
+    @PostMapping("/email-code")
+    public EmailCodeResponse sendEmailCode(@Valid @RequestBody EmailCodeRequest request) {
+        return authService.sendEmailCode(request);
+    }
+
     @PostMapping("/register")
     public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
@@ -33,6 +48,11 @@ public class AuthController {
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/password/reset")
+    public MessageResponse resetPassword(@Valid @RequestBody PasswordResetRequest request) {
+        return authService.resetPassword(request);
     }
 
     @GetMapping("/me")

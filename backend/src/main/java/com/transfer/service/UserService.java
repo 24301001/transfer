@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class UserService {
@@ -64,7 +65,18 @@ public class UserService {
             user.setPhone(normalizeOptional(request.phone()));
         }
         if (request.email() != null) {
-            user.setEmail(normalizeOptional(request.email()));
+            String email = normalizeOptionalEmail(request.email());
+            if (email != null) {
+                userAccountRepository.findByEmail(email)
+                        .filter(existing -> !existing.getId().equals(id))
+                        .ifPresent(existing -> {
+                            throw new BadRequestException("Email already exists: " + email);
+                        });
+            }
+            if ((email == null && user.getEmail() != null) || (email != null && !email.equalsIgnoreCase(user.getEmail()))) {
+                user.setEmailVerified(false);
+            }
+            user.setEmail(email);
         }
         if (request.role() != null) {
             validateLastEnabledAdmin(
@@ -188,7 +200,7 @@ public class UserService {
     }
 
     private String hashPassword(String password) {
-        return PasswordUtils.sha256(password);
+        return PasswordUtils.hash(password);
     }
 
     private String normalizeRequired(String value, String fieldName) {
@@ -196,6 +208,13 @@ public class UserService {
             throw new BadRequestException(fieldName + " is required");
         }
         return value.trim();
+    }
+
+    private String normalizeOptionalEmail(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String normalizeOptional(String value) {
