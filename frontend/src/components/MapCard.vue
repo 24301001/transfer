@@ -112,6 +112,24 @@ const selectedLng = ref(null)
 const selectedLat = ref(null)
 const selectedAddress = ref('')
 
+/** 标记是否已首次渲染（等 tilesloaded） */
+let markersRendered = false
+/** 是否等待 tilesloaded 后刷新标记 */
+let pendingMarkerRender = false
+
+/** 地图瓦片加载完成回调 — 首次渲染标记或排期刷新 */
+function onTilesLoaded() {
+  if (!mapInstance) return
+  if (!markersRendered) {
+    markersRendered = true
+    renderMarkers()
+  } else if (pendingMarkerRender && props.markers?.length) {
+    pendingMarkerRender = false
+    renderMarkers()
+  }
+  // 首次渲染后不移除监听，后续 tilesloaded 也会触发排期刷新
+}
+
 // ====== 初始化地图 ======
 async function initMap() {
   if (!mapContainer.value) return
@@ -166,9 +184,8 @@ async function initMap() {
     mapLoaded.value = true
     emit('map-ready', mapInstance)
 
-    // 异步渲染标记
-    await nextTick()
-    renderMarkers()
+    // 等地图瓦片加载完成后渲染标记（WebGL 引擎需要 tiles 就绪才能正确渲染覆盖物）
+    mapInstance.addEventListener('tilesloaded', onTilesLoaded)
 
   } catch (err) {
     console.error('[MapCard] 地图初始化失败:', err)
@@ -266,48 +283,78 @@ function renderMarkers() {
   const BMapGL = window.BMapGL
   if (!BMapGL) return
 
+  // 如果瓦片尚未加载完成，排期到 tilesloaded 再渲染
+  if (!markersRendered) {
+    pendingMarkerRender = true
+    return
+  }
+
   // 清除旧标记
   clearOverlays()
 
   const realMarkers = props.markers.filter((m) => m.lng !== undefined && m.lat !== undefined)
   if (realMarkers.length === 0) return
 
-  // 添加新标记
-  realMarkers.forEach((m) => {
-    const point = new BMapGL.Point(m.lng, m.lat)
-    const marker = new BMapGL.Marker(point)
-    mapInstance.addOverlay(marker)
-    overlayMarkers.push(marker)
+  console.log('[MapCard] 渲染 ' + realMarkers.length + ' 个标记:', JSON.stringify(realMarkers.map(m => ({lng: m.lng, lat: m.lat, label: m.label}))))
 
-    // 信息窗口
-    if (m.label) {
-      const label = new BMapGL.Label(m.label, {
-        position: point,
-        offset: new BMapGL.Size(10, -25),
-      })
-      label.setStyle({
-        color: '#333',
-        fontSize: '12px',
-        padding: '4px 8px',
-        border: '1px solid #d1d5db',
-        borderRadius: '4px',
-        background: '#fff',
-        whiteSpace: 'nowrap',
-      })
-      mapInstance.addOverlay(label)
-      overlayMarkers.push(label)
-    }
+  // 过滤无效坐标
+  const validMarkers = realMarkers.filter((m) => {
+    return isFinite(m.lng) && isFinite(m.lat) && !isNaN(m.lng) && !isNaN(m.lat)
+  })
+  if (validMarkers.length === 0) {
+    console.warn('[MapCard] 所有标记坐标无效，跳过渲染')
+    return
+  }
+  if (validMarkers.length < realMarkers.length) {
+    console.warn('[MapCard] 已过滤 ' + (realMarkers.length - validMarkers.length) + ' 个无效坐标标记')
+  }
 
-    if (m.onClick) {
-      marker.addEventListener('click', m.onClick)
+  // 添加新标记（逐个保护，任一失败不影响其他）
+  validMarkers.forEach((m, index) => {
+    try {
+      const point = new BMapGL.Point(m.lng, m.lat)
+      const marker = new BMapGL.Marker(point)
+      mapInstance.addOverlay(marker)
+      overlayMarkers.push(marker)
+
+      // 信息窗口
+      if (m.label) {
+        const label = new BMapGL.Label(m.label, {
+          position: point,
+          offset: new BMapGL.Size(10, -25),
+        })
+        label.setStyle({
+          color: '#333',
+          fontSize: '12px',
+          padding: '4px 8px',
+          border: '1px solid #d1d5db',
+          borderRadius: '4px',
+          background: '#fff',
+          whiteSpace: 'nowrap',
+        })
+        mapInstance.addOverlay(label)
+        overlayMarkers.push(label)
+      }
+
+      if (m.onClick) {
+        marker.addEventListener('click', m.onClick)
+      }
+    } catch (e) {
+      console.warn('[MapCard] 标记 #' + index + ' 渲染失败:', e)
     }
   })
 
-  // 适配到所有标记
-  if (realMarkers.length > 0 && !props.center) {
-    const points = realMarkers.map((m) => new BMapGL.Point(m.lng, m.lat))
-    const viewport = mapInstance.getViewport(points)
-    mapInstance.centerAndZoom(viewport.center, viewport.zoom)
+  // 适配到所有标记（异常保护）
+  if (validMarkers.length > 0 && !props.center) {
+    try {
+      const points = validMarkers.map((m) => new BMapGL.Point(m.lng, m.lat))
+      const viewport = mapInstance.getViewport(points)
+      if (viewport && viewport.center && isFinite(viewport.zoom)) {
+        mapInstance.centerAndZoom(viewport.center, viewport.zoom)
+      }
+    } catch (e) {
+      console.warn('[MapCard] getViewport 自适应失败:', e)
+    }
   }
 }
 
@@ -342,6 +389,7 @@ onBeforeUnmount(() => {
   clearOverlays()
   if (mapInstance) {
     mapInstance.removeEventListener('click', onMapClick)
+    mapInstance.removeEventListener('tilesloaded', onTilesLoaded)
     mapInstance.destroy()
     mapInstance = null
   }
@@ -350,9 +398,14 @@ onBeforeUnmount(() => {
 // ====== 监听 markers 变化 ======
 watch(
   () => props.markers,
-  () => {
+  (newMarkers) => {
     if (mapLoaded.value) {
-      renderMarkers()
+      if (markersRendered) {
+        renderMarkers()
+      } else {
+        // 首次标记数据已到但 tiles 未就绪 → 标记排期，tilesloaded 时会渲染
+        pendingMarkerRender = true
+      }
     }
   },
   { deep: true }

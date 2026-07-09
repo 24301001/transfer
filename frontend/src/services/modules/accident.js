@@ -117,11 +117,12 @@ function transformIncidentDetail(data) {
   const incident = data.incident || data
   const base = transformIncident(incident)
 
-  // 附加附件
+  // 附加附件（通过后端文件接口加载）
+  const incidentId = data.incident?.id || base.id
   if (data.attachments && Array.isArray(data.attachments)) {
     base.images = data.attachments.map((a) => ({
       id: a.id,
-      url: a.filePath,
+      url: `/api/v1/incidents/${incidentId}/attachments/${a.id}/file`,
       name: a.originalFilename || a.fileName,
     }))
   }
@@ -138,9 +139,18 @@ function transformIncidentDetail(data) {
     base.type = pred.accidentType || base.type
   }
 
-  // 附加调度任务信息
+  // 附加调度任务信息（含处置反馈）
   if (data.dispatchTasks && data.dispatchTasks.length > 0) {
     base.dispatchTaskId = data.dispatchTasks[0].id
+    base.dispatchTasks = data.dispatchTasks.map((t) => ({
+      id: t.id,
+      status: t.status,
+      feedback: t.feedback || '',
+      vehicleType: t.taskType || '',
+    }))
+    // 取最近一条有反馈的作为处置反馈
+    const feedbackTask = data.dispatchTasks.find((t) => t.feedback)
+    base.dispatchFeedback = feedbackTask ? feedbackTask.feedback : ''
   }
 
   return base
@@ -210,6 +220,173 @@ export async function addAccident(data) {
     data: {
       id: res.data.id,
       caseNo: res.data.incidentNo,
+    },
+  }
+}
+
+/**
+ * 上报事故（含附件，multipart）
+ * POST /api/v1/incidents/with-attachments
+ * @param {object} data - 前端格式的事故数据，images 中需含 raw File 对象
+ */
+export async function addAccidentWithAttachments(data) {
+  const formData = new FormData()
+
+  // 构建 CreateIncidentRequest JSON
+  const body = {
+    locationName: data.location?.name || '',
+    address: data.location?.area || '',
+    roadName: data.location?.road || '',
+    longitude: data.location?.lng,
+    latitude: data.location?.lat,
+    coordinateType: data.coordinateType || null,
+    initialAccidentType: data.accidentType || '',
+    description: data.description || '',
+    reportUserId: data.reporterId || null,
+    occupiedLanes: data.occupiedLanes || null,
+  }
+  formData.append('incident', new Blob([JSON.stringify(body)], { type: 'application/json' }))
+
+  // 添加文件
+  const files = (data.images || []).filter((img) => img.raw)
+  files.forEach((img) => {
+    formData.append('files', img.raw, img.name)
+  })
+
+  const res = await request.post('/v1/incidents/with-attachments', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+  // with-attachments 返回 IncidentDetailResponse: { incident, attachments, ... }
+  return {
+    code: 200,
+    data: {
+      id: res.data.incident?.id || res.data.id,
+      caseNo: res.data.incident?.incidentNo || res.data.incidentNo,
+    },
+  }
+}
+
+// ====== PublicIncidentSubmitResponse 转换 ======
+
+/** 转换后端 PublicIncidentSubmitResponse → 前端扁平结构 */
+function transformPublicReportResponse(data) {
+  return {
+    incidentDetail: data.incidentDetail ? transformIncidentDetail(data.incidentDetail) : null,
+    immediateAdvice: data.immediateAdvice ? {
+      calmingMessage: data.immediateAdvice.calmingMessage || '',
+      immediateAdvice: data.immediateAdvice.immediateAdvice || '',
+      actionItems: data.immediateAdvice.actionItems || [],
+      casualtyDetected: !!data.immediateAdvice.casualtyDetected,
+      call120Required: !!data.immediateAdvice.call120Required,
+      emergencyPhone: data.immediateAdvice.emergencyPhone || '',
+      aiGenerated: !!data.immediateAdvice.aiGenerated,
+    } : null,
+    estimatedPoliceArrivalMinutes: data.estimatedPoliceArrivalMinutes ?? null,
+    estimatedPoliceArrivalText: data.estimatedPoliceArrivalText || '',
+    predictionSubmit: data.predictionSubmit ? {
+      submitted: !!data.predictionSubmit.submitted,
+      status: data.predictionSubmit.status || '',
+      message: data.predictionSubmit.message || '',
+      dataModuleTraceId: data.predictionSubmit.dataModuleTraceId || '',
+    } : null,
+  }
+}
+
+/**
+ * 公共事故上报（JSON，无附件）
+ * POST /api/v1/incidents/public-report
+ * @param {object} data - 前端格式的事故数据
+ * @returns {Promise<{code: number, data: object}>}
+ */
+export async function publicReport(data) {
+  const body = {
+    locationName: data.location?.name || '',
+    address: data.location?.area || '',
+    roadName: data.location?.road || '',
+    longitude: data.location?.lng,
+    latitude: data.location?.lat,
+    coordinateType: data.coordinateType || null,
+    initialAccidentType: data.accidentType || '',
+    description: data.description || '',
+    reportUserId: data.reporterId || null,
+    occupiedLanes: data.occupiedLanes || null,
+  }
+  const res = await request.post('/v1/incidents/public-report', body)
+  return {
+    code: 200,
+    data: transformPublicReportResponse(res.data),
+  }
+}
+
+/**
+ * 公共事故上报（Multipart，含照片/视频）
+ * POST /api/v1/incidents/public-report (multipart)
+ * @param {object} data - 前端格式的事故数据，images 中需含 raw File 对象
+ * @returns {Promise<{code: number, data: object}>}
+ */
+export async function publicReportWithAttachments(data) {
+  const formData = new FormData()
+
+  // 构建 CreateIncidentRequest JSON
+  const body = {
+    locationName: data.location?.name || '',
+    address: data.location?.area || '',
+    roadName: data.location?.road || '',
+    longitude: data.location?.lng,
+    latitude: data.location?.lat,
+    coordinateType: data.coordinateType || null,
+    initialAccidentType: data.accidentType || '',
+    description: data.description || '',
+    reportUserId: data.reporterId || null,
+    occupiedLanes: data.occupiedLanes || null,
+  }
+  formData.append('incident', new Blob([JSON.stringify(body)], { type: 'application/json' }))
+
+  // 照片 → backend consumes "photos"
+  const photos = (data.images || []).filter((img) => img.raw)
+  photos.forEach((img) => {
+    formData.append('photos', img.raw, img.name)
+  })
+
+  // 视频 → backend consumes "videos"
+  if (data.video?.raw) {
+    formData.append('videos', data.video.raw, data.video.name)
+  }
+
+  const res = await request.post('/v1/incidents/public-report', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+  return {
+    code: 200,
+    data: transformPublicReportResponse(res.data),
+  }
+}
+
+/**
+ * 事故历史记录（管理员用）
+ * GET /api/v1/admin/incidents/history
+ * @param {{ page?: number, pageSize?: number, status?: string, riskLevel?: string, accidentType?: string, keyword?: string }} params
+ */
+export async function getAccidentHistory(params) {
+  const backendParams = {}
+  if (params) {
+    if (params.page) backendParams.page = params.page - 1
+    if (params.pageSize) backendParams.size = params.pageSize
+    if (params.status) backendParams.status = mapIncidentStatusReverse(params.status)
+    if (params.riskLevel) backendParams.riskLevel = mapRiskLevelReverse(params.riskLevel)
+    if (params.accidentType) backendParams.accidentType = params.accidentType
+    if (params.keyword) backendParams.keyword = params.keyword
+  }
+  const res = await request.get('/v1/admin/incidents/history', { params: backendParams })
+  return {
+    code: 200,
+    data: {
+      list: (res.data.content || []).map(transformIncident),
+      total: res.data.totalElements || 0,
+      page: res.data.number || 0,
+      size: res.data.size || 20,
     },
   }
 }

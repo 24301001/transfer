@@ -53,6 +53,12 @@ const routes = [
         component: () => import('@/views/command/DispatchTask.vue'),
         meta: { title: '调度处理', roles: [ROLES.COMMAND.key] },
       },
+      {
+        path: 'command/accident-query',
+        name: 'AccidentQuery',
+        component: () => import('@/views/command/AccidentQuery.vue'),
+        meta: { title: '事故查询', roles: [ROLES.COMMAND.key] },
+      },
       // ====== 清障救援 ======
       {
         path: 'rescue/tasks',

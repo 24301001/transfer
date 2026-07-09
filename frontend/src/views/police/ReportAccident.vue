@@ -209,79 +209,110 @@
       </div>
     </div>
 
-    <!-- 识别结果展示 -->
-    <el-dialog v-model="resultVisible" title="系统识别结果" width="700px" top="5vh" destroy-on-close>
+    <!-- 提交结果弹窗 -->
+    <el-dialog
+      v-model="resultVisible"
+      title="事故提交结果"
+      width="780px"
+      top="5vh"
+      destroy-on-close
+      class="public-report-dialog"
+    >
       <div v-if="result" class="result-container">
-        <el-row :gutter="20">
-          <el-col :span="8">
-            <div class="result-stat">
-              <span class="stat-label">事故类型</span>
-              <span class="stat-value highlight">{{ result.type }}</span>
-            </div>
-          </el-col>
-          <el-col :span="8">
-            <div class="result-stat">
-              <span class="stat-label">风险等级</span>
-              <RiskBadge :level="result.riskLevel" size="large" />
-            </div>
-          </el-col>
-          <el-col :span="8">
-            <div class="result-stat">
-              <span class="stat-label">识别可信度</span>
-              <span class="stat-value">{{ result.confidence }}</span>
-            </div>
-          </el-col>
-        </el-row>
-
-        <el-divider />
-
-        <div class="result-section">
-          <h4>预计影响</h4>
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-descriptions :column="1" size="small" border>
-                <el-descriptions-item label="影响车道">{{ result.affectedLanes }}</el-descriptions-item>
-                <el-descriptions-item label="拥堵持续时间">{{ result.congestionDuration }}</el-descriptions-item>
-                <el-descriptions-item label="道路恢复时间">{{ result.recoveryTime }}</el-descriptions-item>
-                <el-descriptions-item label="当前车流">{{ result.trafficFlow }}</el-descriptions-item>
-              </el-descriptions>
-            </el-col>
-            <el-col :span="12">
-              <el-descriptions :column="1" size="small" border>
-                <el-descriptions-item label="天气">{{ result.weather }}</el-descriptions-item>
-                <el-descriptions-item label="道路等级">{{ result.roadLevel }}</el-descriptions-item>
-                <el-descriptions-item label="事故编号">{{ result.caseNo }}</el-descriptions-item>
-              </el-descriptions>
-            </el-col>
-          </el-row>
+        <div v-if="submitSucceeded" class="result-success-banner">
+          <el-icon :size="20"><CircleCheckFilled /></el-icon>
+          事故已成功提交至指挥中心，系统正在进行智能分析
         </div>
 
-        <div class="result-section">
-          <h4>初步处置建议</h4>
-          <el-alert
-            :title="result.disposalAdvice"
-            type="warning"
-            :closable="false"
-            show-icon
-          />
+        <!-- ── 1. 市民即时安全提示 ── -->
+        <div v-if="publicReportMeta?.immediateAdvice" class="result-section advice-section">
+          <h4>
+            <el-icon style="vertical-align:-3px;"><WarningFilled /></el-icon>
+            市民即时安全提示
+          </h4>
+          <div class="advice-card">
+            <p class="calming-msg">{{ publicReportMeta.immediateAdvice.calmingMessage }}</p>
+            <p class="advice-text">{{ publicReportMeta.immediateAdvice.immediateAdvice }}</p>
+            <ul v-if="publicReportMeta.immediateAdvice.actionItems.length > 0" class="action-list">
+              <li v-for="(item, idx) in publicReportMeta.immediateAdvice.actionItems" :key="idx">
+                {{ item }}
+              </li>
+            </ul>
+            <el-alert
+              v-if="publicReportMeta.immediateAdvice.call120Required"
+              title="检测到可能的人员受伤，请立即拨打 120 急救电话！"
+              type="danger"
+              :closable="false"
+              show-icon
+              style="margin-top:10px;"
+            />
+          </div>
         </div>
 
-        <div class="result-section">
-          <h4>AI 分析说明</h4>
+        <!-- ── 2. 预计交警到达时间 ── -->
+        <div v-if="publicReportMeta?.estimatedPoliceArrivalText" class="result-section arrival-section">
+          <h4>
+            <el-icon style="vertical-align:-3px;"><Van /></el-icon>
+            预计交警到达
+          </h4>
           <el-alert
-            :title="result.aiExplanation"
+            :title="publicReportMeta.estimatedPoliceArrivalText"
             type="info"
             :closable="false"
             show-icon
           />
         </div>
-      </div>
 
-      <div v-else class="result-loading">
-        <el-skeleton :rows="6" animated />
-        <div style="text-align:center;margin-top:16px;">
-          <el-icon class="is-loading" :size="24"><Loading /></el-icon>
-          <p>系统正在分析事故数据，请稍候...</p>
+        <!-- ── 3. 预测模块提交状态 ── -->
+        <div v-if="publicReportMeta?.predictionSubmit" class="result-section prediction-section">
+          <h4>
+            <el-icon style="vertical-align:-3px;"><DataAnalysis /></el-icon>
+            智能预测状态
+          </h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="提交状态">
+              <el-tag :type="publicReportMeta.predictionSubmit.submitted ? 'success' : 'warning'" size="small">
+                {{ publicReportMeta.predictionSubmit.submitted ? '已提交' : '未提交' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="状态描述">
+              {{ publicReportMeta.predictionSubmit.status || publicReportMeta.predictionSubmit.message || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item
+              v-if="publicReportMeta.predictionSubmit.dataModuleTraceId"
+              label="追踪编号"
+            >
+              <code class="trace-id">{{ publicReportMeta.predictionSubmit.dataModuleTraceId }}</code>
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+
+        <el-divider />
+
+        <!-- ── 4. 事故识别结果 ── -->
+        <div class="result-section">
+          <h4>事故识别结果</h4>
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <div class="result-stat">
+                <span class="stat-label">事故类型</span>
+                <span class="stat-value highlight">{{ result.type }}</span>
+              </div>
+            </el-col>
+            <el-col :span="8">
+              <div class="result-stat">
+                <span class="stat-label">风险等级</span>
+                <RiskBadge :level="result.riskLevel" size="large" />
+              </div>
+            </el-col>
+            <el-col :span="8">
+              <div class="result-stat">
+                <span class="stat-label">识别可信度</span>
+                <span class="stat-value">{{ result.confidence }}</span>
+              </div>
+            </el-col>
+          </el-row>
+
         </div>
       </div>
 
@@ -351,13 +382,14 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
 import { useAiChatContext } from '@/composables/useAiChatContext'
-import { addAccident as apiAddAccident, getAccidentDetail } from '@/services/modules/accident'
+import { publicReport, publicReportWithAttachments } from '@/services/modules/accident'
 import { reverseGeocode } from '@/services/modules/map'
 import { PRESET_LOCATIONS, getPresetCoords, getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import {
   Upload, Aim, LocationFilled, Loading, View, Collection,
   WarningFilled, ChatLineSquare, VideoCamera, VideoPause, Delete, InfoFilled,
+  CircleCheckFilled, Van, DataAnalysis,
 } from '@element-plus/icons-vue'
 import PhotoUploader from '@/components/PhotoUploader.vue'
 import MapCard from '@/components/MapCard.vue'
@@ -373,6 +405,11 @@ const resultVisible = ref(false)
 const adviceVisible = ref(false)
 const result = ref(null)
 const lastSubmission = ref(null)
+
+/** 公共上报返回的元数据（即时提示、预计到达、预测提交状态） */
+const publicReportMeta = ref(null)
+/** 提交成功后显示绿色提示 */
+const submitSucceeded = ref(false)
 
 // ====== 表单数据（必须在 AI 聊天上下文之前定义，避免 TDZ） ======
 const form = reactive({
@@ -707,9 +744,10 @@ async function handleSubmit() {
 
   submitting.value = true
   try {
-    const res = await apiAddAccident({
-      images: form.images.map((img) => ({ name: img.name, url: img.url })),
-      video: videoBlob.value ? { name: '现场视频.webm', size: videoBlob.value.size } : null,
+    const hasRealFiles = form.images.some((img) => img.raw)
+    const payload = {
+      images: form.images,
+      video: videoBlob.value ? { raw: videoBlob.value, name: '现场视频.webm' } : null,
       location: {
         name: form.locationName || form.locationStr,
         area: form.customLocation || form.locationName,
@@ -721,46 +759,40 @@ async function handleSubmit() {
       accidentType: form.accidentType || '',
       reporter: userStore.nickname,
       reporterId: userStore.userInfo?.id || 0,
-      // 告诉后端坐标类型为 WGS84
       coordinateType: 'WGS84',
-    })
+    }
+    const res = hasRealFiles ? await publicReportWithAttachments(payload) : await publicReport(payload)
 
     if (res.code === 200) {
+      const data = res.data
+      const detail = data.incidentDetail
+
+      // 最近提交记录
       lastSubmission.value = {
-        id: res.data.id,
-        caseNo: res.data.caseNo,
+        id: detail?.id || null,
+        caseNo: detail?.caseNo || '',
         reportTime: new Date().toLocaleString('zh-CN'),
         location: form.locationName,
       }
-      ElMessage.success('事故提交成功！系统正在分析识别...')
 
+      // 识别结果数据（与原有 result 结构一致）
+      result.value = detail
+
+      // 公共上报附加元数据
+      publicReportMeta.value = {
+        immediateAdvice: data.immediateAdvice,
+        estimatedPoliceArrivalMinutes: data.estimatedPoliceArrivalMinutes,
+        estimatedPoliceArrivalText: data.estimatedPoliceArrivalText,
+        predictionSubmit: data.predictionSubmit,
+      }
+
+      if (detail?.id) {
+        accidentStore.updateAccident(detail.id, detail)
+      }
+
+      submitSucceeded.value = true
       resultVisible.value = true
-      setTimeout(async () => {
-        try {
-          const detailRes = await getAccidentDetail(res.data.id)
-          if (detailRes.code === 200) {
-            result.value = detailRes.data
-            accidentStore.updateAccident(res.data.id, detailRes.data)
-          }
-        } catch {
-          result.value = {
-            id: res.data.id,
-            caseNo: res.data.caseNo,
-            type: form.accidentType || '追尾事故',
-            riskLevel: '中',
-            confidence: '86.5%',
-            congestionDuration: '35分钟',
-            recoveryTime: '50分钟',
-            affectedLanes: '2条',
-            trafficFlow: '平峰',
-            weather: '晴',
-            roadLevel: '快速路',
-            disposalAdvice: '1. 在事故后方放置警示标志；2. 引导车辆绕行；3. 通知清障车到场',
-            supportAdvice: '常规处置即可',
-            aiExplanation: '【系统分析结果】经图像识别分析，判定为' + (form.accidentType || '追尾事故') + '，综合风险评估为"中"等级。',
-          }
-        }
-      }, 3000)
+      ElMessage.success('事故提交成功！')
     }
   } catch {
     // 错误已在拦截器中处理
@@ -785,6 +817,8 @@ function handleReset() {
   resultVisible.value = false
   adviceVisible.value = false
   lastSubmission.value = null
+  publicReportMeta.value = null
+  submitSucceeded.value = false
   formRef.value?.resetFields()
 }
 
@@ -1065,6 +1099,76 @@ function openAdviceDialog() {
     .video-actions {
       display: flex;
       gap: 10px;
+    }
+  }
+}
+
+.public-report-dialog {
+  .result-success-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba($success, 0.08), rgba($success, 0.02));
+    border: 1px solid rgba($success, 0.15);
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: $success;
+    font-weight: 500;
+  }
+
+  .advice-section {
+    .advice-card {
+      background: linear-gradient(135deg, rgba($warning, 0.06), rgba($warning, 0.02));
+      border: 1px solid rgba($warning, 0.12);
+      border-radius: 10px;
+      padding: 16px;
+
+      .calming-msg {
+        font-size: 15px;
+        font-weight: 600;
+        color: $text-primary;
+        margin-bottom: 8px;
+      }
+
+      .advice-text {
+        font-size: 14px;
+        color: $text-secondary;
+        line-height: 1.7;
+        margin-bottom: 10px;
+        white-space: pre-line;
+      }
+
+      .action-list {
+        margin: 0;
+        padding-left: 20px;
+        list-style: disc;
+
+        li {
+          font-size: 13px;
+          color: $text-secondary;
+          line-height: 1.8;
+        }
+      }
+    }
+  }
+
+  .arrival-section {
+    .el-alert {
+      background: linear-gradient(135deg, rgba($accent, 0.06), rgba($accent, 0.02));
+      border: 1px solid rgba($accent, 0.10);
+    }
+  }
+
+  .prediction-section {
+    .trace-id {
+      font-family: $font-mono;
+      font-size: 11px;
+      background: $border-light;
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: $text-secondary;
     }
   }
 }

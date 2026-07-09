@@ -306,6 +306,15 @@ a {
   }
 }
 
+// -- 图片预览查看器（确保覆盖所有内容在最上层） --
+.el-image-viewer {
+  z-index: 9999 !important;
+
+  .el-image-viewer__mask {
+    opacity: 0.9 !important;
+  }
+}
+
 // -- 描述列表 --
 .el-descriptions {
   .el-descriptions__title { font-weight: 600; }

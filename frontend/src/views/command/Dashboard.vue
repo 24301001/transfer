@@ -112,6 +112,24 @@
             <span v-else class="text-muted">暂无建议</span>
           </el-descriptions-item>
         </el-descriptions>
+
+        <!-- 事故描述（列表数据已有） -->
+        <div v-if="selectedAccident.description" class="drawer-section">
+          <h4 class="drawer-section-title">事故描述</h4>
+          <p class="drawer-section-text">{{ selectedAccident.description }}</p>
+        </div>
+
+        <!-- 处置反馈（从详情接口获取） -->
+        <div v-if="drawerDetail?.dispatchFeedback" class="drawer-section">
+          <h4 class="drawer-section-title">
+            <el-tag size="small" type="success" effect="plain" style="margin-right:6px;">反馈</el-tag>
+            处置反馈
+          </h4>
+          <p class="drawer-section-text feedback-text">{{ drawerDetail.dispatchFeedback }}</p>
+        </div>
+        <div v-else-if="drawerDetailLoading" class="drawer-section">
+          <p class="text-muted" style="text-align:center;padding:8px;">加载处置反馈...</p>
+        </div>
       </template>
       <template #footer>
         <div style="display:flex; gap:12px;">
@@ -180,7 +198,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccidentStore } from '@/stores/accident'
-import { getAccidentList } from '@/services/modules/accident'
+import { getAccidentList, getAccidentDetail } from '@/services/modules/accident'
 import { createDispatch } from '@/services/modules/dispatch'
 import { wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
@@ -227,15 +245,30 @@ const mapMarkers = computed(() =>
 // ====== Marker 点击 → 抽屉 ======
 const selectedAccidentId = ref(null)
 const drawerVisible = ref(false)
+const drawerDetail = ref(null)
+const drawerDetailLoading = ref(false)
 
 const selectedAccident = computed(() => {
   if (!selectedAccidentId.value) return null
   return accidentStore.accidentList.find((a) => a.id === selectedAccidentId.value) || null
 })
 
-function openDrawer(accidentId) {
+async function openDrawer(accidentId) {
   selectedAccidentId.value = accidentId
   drawerVisible.value = true
+  // 获取完整详情（含调度反馈）
+  drawerDetailLoading.value = true
+  drawerDetail.value = null
+  try {
+    const res = await getAccidentDetail(accidentId)
+    if (res.code === 200) {
+      drawerDetail.value = res.data
+    }
+  } catch {
+    // 静默失败，drawer 仍显示列表数据
+  } finally {
+    drawerDetailLoading.value = false
+  }
 }
 
 // ====== 分配清障对话框 ======
@@ -451,5 +484,34 @@ onUnmounted(() => {
 .text-muted {
   color: $text-light;
   font-size: 13px;
+}
+
+// ===== drawer 额外内容 =====
+.drawer-section {
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--el-bg-color-page);
+  border-radius: 10px;
+}
+
+.drawer-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: $text-primary;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.drawer-section-text {
+  font-size: 13px;
+  color: $text-secondary;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.feedback-text {
+  color: $text-primary;
 }
 </style>

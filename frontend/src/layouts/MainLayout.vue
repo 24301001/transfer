@@ -83,6 +83,7 @@ import {
   Van,
   Tickets,
   List,
+  Search,
 } from '@element-plus/icons-vue'
 import FloatingBall from '@/components/FloatingBall.vue'
 
@@ -97,6 +98,7 @@ const menuConfig = {
   [ROLES.COMMAND.key]: [
     { path: '/command/dashboard', label: '指挥大屏', icon: Monitor },
     { path: '/command/dispatch', label: '调度处理', icon: Van },
+    { path: '/command/accident-query', label: '事故查询', icon: Search },
   ],
   [ROLES.RESCUE.key]: [
     { path: '/rescue/tasks', label: '清障任务', icon: Tickets },
