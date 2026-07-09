@@ -49,6 +49,15 @@ public record CreateIncidentRequest(
         @Min(0)
         Integer peopleFlow,
 
+        @Min(0)
+        Integer peopleInvolved,
+
+        @Min(0)
+        Integer injuredCount,
+
+        @Size(max = 500)
+        String injuryEstimate,
+
         @Size(max = 40)
         String weather,
 

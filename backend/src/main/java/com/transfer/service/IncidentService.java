@@ -171,6 +171,18 @@ public class IncidentService {
                 request.peopleFlow()
         );
 
+        incident.setPeopleInvolved(
+                request.peopleInvolved()
+        );
+
+        incident.setInjuredCount(
+                request.injuredCount()
+        );
+
+        incident.setInjuryEstimate(
+                trimToNull(request.injuryEstimate())
+        );
+
         incident.setWeather(
                 trimToNull(request.weather())
         );

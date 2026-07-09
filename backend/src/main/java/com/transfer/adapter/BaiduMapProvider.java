@@ -5,12 +5,15 @@ import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
 import com.transfer.enums.CoordinateType;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Component
 public class BaiduMapProvider implements MapProvider {
@@ -25,8 +28,18 @@ public class BaiduMapProvider implements MapProvider {
             @Value("${baidu.map.server-ak:}")
             String serverAk
     ) {
+        // 百度地图 API 返回 Content-Type: text/javascript 而非 application/json，
+        // 需要注册自定义 MessageConverter 以支持解析。
+        MappingJackson2HttpMessageConverter converter =
+                new MappingJackson2HttpMessageConverter();
+        converter.setSupportedMediaTypes(List.of(
+                MediaType.APPLICATION_JSON,
+                new MediaType("text", "javascript")
+        ));
+
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
+                .messageConverters(converters -> converters.add(0, converter))
                 .build();
 
         this.serverAk = serverAk == null ? "" : serverAk.trim();
