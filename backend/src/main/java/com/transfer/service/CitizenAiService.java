@@ -12,11 +12,20 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Service
 public class CitizenAiService {
 
     private static final String EMERGENCY_PHONE = "120";
+    /**
+     * 严格匹配独立的 120，避免把 111120、1120 等错误号码误判为合法急救电话。
+     */
+    private static final Pattern STANDALONE_120_PATTERN = Pattern.compile("(?<!\\d)120(?!\\d)");
+    /**
+     * 修正 AI 偶发生成的异常急救号码，例如 1120、111120、111 120。
+     */
+    private static final Pattern BROKEN_120_PATTERN = Pattern.compile("(?<!\\d)1{1,}\\s*120(?!\\d)");
 
     private final SiliconFlowClient siliconFlowClient;
     private final IncidentRepository incidentRepository;
@@ -70,18 +79,14 @@ public class CitizenAiService {
                 0.6
         );
 
-        String reply = sanitizeAndLimit(
+        String reply = enforceEmergencyPhoneWhenNeeded(
                 firstNonBlank(
                         aiReply,
                         fallbackChatReply(question, casualtyDetected)
                 ),
+                casualtyDetected,
                 900
         );
-
-        if (casualtyDetected && !reply.contains("120")) {
-            reply = "如现场有人受伤、昏迷、流血或被困，请先拨打120。" + reply;
-            reply = sanitizeAndLimit(reply, 900);
-        }
 
         return new CitizenAiChatResponse(
                 reply,
@@ -106,30 +111,19 @@ public class CitizenAiService {
                 casualtyDetected
         );
 
+        /*
+         * 提交成功弹窗属于安全关键提示。这里不再优先采用大模型自由生成文本，
+         * 避免出现 111120、1120 等错误号码或不稳定表述。
+         * 大模型仍可用于后续分析/咨询，但市民即时安全提示以服务端规则模板为准。
+         */
         String fallbackAdvice = String.join(" ", actionItems);
+        boolean aiGenerated = false;
 
-        String aiReply = siliconFlowClient.chat(
-                immediateAdviceSystemPrompt(),
-                buildImmediateAdvicePrompt(
-                        incident,
-                        casualtyDetected,
-                        actionItems
-                ),
-                260,
-                0.2
-        );
-
-        boolean aiGenerated = aiReply != null && !aiReply.isBlank();
-
-        String advice = sanitizeAndLimit(
-                firstNonBlank(aiReply, fallbackAdvice),
+        String advice = enforceEmergencyPhoneWhenNeeded(
+                fallbackAdvice,
+                casualtyDetected,
                 260
         );
-
-        if (casualtyDetected && !advice.contains("120")) {
-            advice = "如发现人员受伤，请立即拨打120。" + advice;
-            advice = sanitizeAndLimit(advice, 260);
-        }
 
         return new CitizenImmediateAdviceResponse(
                 "信息已提交，请先保证自身安全，保持手机畅通。",
@@ -252,6 +246,53 @@ public class CitizenAiService {
         }
 
         return "当前AI服务未配置或暂时不可用。我可以先协助你完成事故上报：确认定位、填写事故描述、上传现场照片；其他问题请稍后再试。";
+    }
+
+    private String enforceEmergencyPhoneWhenNeeded(
+            String value,
+            boolean casualtyDetected,
+            int maxLength
+    ) {
+        String text = sanitizeAndLimit(
+                normalizeEmergencyPhone(value),
+                maxLength
+        );
+
+        if (casualtyDetected && !containsStandalone120(text)) {
+            text = sanitizeAndLimit(
+                    "如现场有人受伤、昏迷、流血或被困，请立即拨打120急救电话。" + text,
+                    maxLength
+            );
+        }
+
+        return text;
+    }
+
+    private boolean containsStandalone120(String text) {
+        return text != null && STANDALONE_120_PATTERN.matcher(text).find();
+    }
+
+    private String normalizeEmergencyPhone(String value) {
+        String text = normalizeFullWidthDigits(safe(value));
+        text = BROKEN_120_PATTERN.matcher(text).replaceAll(EMERGENCY_PHONE);
+        return text;
+    }
+
+    private String normalizeFullWidthDigits(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder builder = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch >= '０' && ch <= '９') {
+                builder.append((char) ('0' + (ch - '０')));
+            } else {
+                builder.append(ch);
+            }
+        }
+        return builder.toString();
     }
 
     private String sanitizeAndLimit(
