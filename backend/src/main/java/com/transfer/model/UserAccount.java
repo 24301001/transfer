@@ -21,7 +21,7 @@ public class UserAccount extends AuditableEntity {
     @Column(length = 32)
     private String phone;
 
-    @Column(length = 128)
+    @Column(unique = true, length = 128)
     private String email;
 
     @Enumerated(EnumType.STRING)
@@ -34,6 +34,9 @@ public class UserAccount extends AuditableEntity {
 
     @Column(nullable = false)
     private String passwordHash;
+
+    @Column(nullable = false)
+    private Boolean emailVerified = false;
 
     public String getFullName() {
         return fullName;
@@ -89,5 +92,13 @@ public class UserAccount extends AuditableEntity {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public Boolean getEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(Boolean emailVerified) {
+        this.emailVerified = emailVerified;
     }
 }

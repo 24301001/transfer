@@ -186,8 +186,9 @@ public class DemoDataInitializer {
         user.setStatus(UserStatus.ENABLED);
         user.setPhone(phone);
         user.setEmail(email);
+        user.setEmailVerified(true);
         user.setPasswordHash(
-                PasswordUtils.sha256("123456")
+                PasswordUtils.hash("123456")
         );
 
         repository.save(user);

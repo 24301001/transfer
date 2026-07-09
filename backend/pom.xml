@@ -51,6 +51,12 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- 邮箱验证码发送，可通过 spring.mail.* 配置 SMTP -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- 开发热更新工具 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
