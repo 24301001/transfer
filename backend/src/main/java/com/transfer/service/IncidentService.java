@@ -47,7 +47,6 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -66,7 +65,6 @@ public class IncidentService {
     private final PredictionClient predictionClient;
     private final DeepSeekClient deepSeekClient;
     private final FormalDispositionPlanService formalDispositionPlanService;
-    private final ClearanceRescueAdviceService clearanceRescueAdviceService;
     private final ArrivalEstimateService arrivalEstimateService;
     private final CitizenAiService citizenAiService;
     private final OperationLogService operationLogService;
@@ -83,7 +81,6 @@ public class IncidentService {
             PredictionClient predictionClient,
             DeepSeekClient deepSeekClient,
             FormalDispositionPlanService formalDispositionPlanService,
-            ClearanceRescueAdviceService clearanceRescueAdviceService,
             ArrivalEstimateService arrivalEstimateService,
             CitizenAiService citizenAiService,
             OperationLogService operationLogService,
@@ -100,7 +97,6 @@ public class IncidentService {
         this.predictionClient = predictionClient;
         this.deepSeekClient = deepSeekClient;
         this.formalDispositionPlanService = formalDispositionPlanService;
-        this.clearanceRescueAdviceService = clearanceRescueAdviceService;
         this.arrivalEstimateService = arrivalEstimateService;
         this.citizenAiService = citizenAiService;
         this.operationLogService = operationLogService;
@@ -727,13 +723,12 @@ public class IncidentService {
                         request.riskFactors()
                 );
 
-        /*
-         * 指挥中心现在展示的是预测模块直接返回的结果表。
-         * 这里不再把预测结果加工成“处置建议/正式处置方案”，
-         * 只保留预测模块原始返回的 suggestion 字段，供表格展示。
-         */
         String suggestions =
-                trimToNull(request.suggestion());
+                formalDispositionPlanService.buildFormalPlan(
+                        incident,
+                        request,
+                        riskFactors
+                );
 
         PredictionOutcome outcome =
                 new PredictionOutcome(
@@ -830,8 +825,8 @@ public class IncidentService {
                 predictionResultRepository.save(result);
 
         updateIncidentFromPrediction(
-        incident,
-        saved
+                incident,
+                saved
         );
 
         operationLogService.record(
@@ -979,94 +974,6 @@ public class IncidentService {
         return PredictionDisplayResponse.from(
                 incident,
                 result
-        );
-    }
-
-    /**
-     * 指挥中心手动调用硅基流动，基于最新预测结果重新生成自然语言解释。
-     *
-     * 注意：这里生成的是“预测结果解释”，不是清障救援处置建议。
-     */
-    @Transactional
-    public PredictionDisplayResponse regenerateLatestPredictionExplanation(
-            Long incidentId,
-            Long operatorUserId
-    ) {
-        Incident incident =
-                findIncident(incidentId);
-
-        PredictionResult result =
-                predictionResultRepository
-                        .findFirstByIncidentIdOrderByCreatedAtDesc(
-                                incidentId
-                        )
-                        .orElseThrow(
-                                () -> new ResourceNotFoundException(
-                                        "Prediction result not found for incident: "
-                                                + incidentId
-                                )
-                        );
-
-        PredictionOutcome outcome =
-                new PredictionOutcome(
-                        result.getAccidentType(),
-                        result.getRiskLevel(),
-                        result.getCongestionDurationMinutes(),
-                        result.getRecoveryDurationMinutes(),
-                        result.getConfidence(),
-                        firstNonBlank(
-                                result.getModelVersion(),
-                                "data-module"
-                        ),
-                        result.getSuggestions(),
-                        splitText(result.getRiskFactors()),
-                        result.getEvidenceSummary()
-                );
-
-        String explanation =
-                firstNonBlank(
-                        deepSeekClient.explain(
-                                outcome,
-                                incident.getLocationName(),
-                                incident.getDescription()
-                        ),
-                        result.getExplanation()
-                );
-
-        result.setExplanation(
-                trimToNull(explanation)
-        );
-
-        PredictionResult saved =
-                predictionResultRepository.save(result);
-
-        operationLogService.record(
-                operatorUserId,
-                "GENERATE_PREDICTION_EXPLANATION",
-                "PredictionResult",
-                saved.getId().toString(),
-                null,
-                "SILICON_FLOW"
-        );
-
-        realtimeService.publish(
-                "PREDICTION_EXPLANATION_GENERATED",
-                Map.of(
-                        "incidentId",
-                        incident.getId(),
-
-                        "predictionResultId",
-                        saved.getId(),
-
-                        "hasExplanation",
-                        saved.getExplanation() != null
-                                && !saved.getExplanation().isBlank()
-                )
-        );
-
-        return PredictionDisplayResponse.from(
-                incident,
-                saved
         );
     }
 
@@ -1479,19 +1386,6 @@ public class IncidentService {
         return extension.length() > 10
                 ? ""
                 : extension;
-    }
-
-    private List<String> splitText(String value) {
-        if (value == null || value.isBlank()) {
-            return List.of();
-        }
-
-        return Arrays.stream(
-                        value.split("[,，;；、\n]+")
-                )
-                .map(String::trim)
-                .filter(item -> !item.isBlank())
-                .toList();
     }
 
     private String firstNonBlank(

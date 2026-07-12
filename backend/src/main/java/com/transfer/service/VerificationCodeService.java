@@ -24,6 +24,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Locale;
@@ -43,10 +44,12 @@ public class VerificationCodeService {
     private final SecureRandom random = new SecureRandom();
     private final Map<String, CodeEntry> captchaStore = new ConcurrentHashMap<>();
     private final Map<String, CodeEntry> emailCodeStore = new ConcurrentHashMap<>();
+    private final Map<String, Instant> emailSendNextAllowedStore = new ConcurrentHashMap<>();
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final String mailFrom;
     private final int captchaExpireSeconds;
     private final int emailCodeExpireSeconds;
+    private final int emailCodeResendIntervalSeconds;
     private final boolean returnCodeInResponse;
     private final boolean consoleLogCode;
 
@@ -55,13 +58,15 @@ public class VerificationCodeService {
             @Value("${app.mail.from:no-reply@transfer.local}") String mailFrom,
             @Value("${app.verification.captcha-expire-seconds:120}") int captchaExpireSeconds,
             @Value("${app.verification.email-code-expire-seconds:300}") int emailCodeExpireSeconds,
-            @Value("${app.verification.return-code-in-response:true}") boolean returnCodeInResponse,
-            @Value("${app.verification.console-log-code:true}") boolean consoleLogCode
+            @Value("${app.verification.email-code-resend-interval-seconds:60}") int emailCodeResendIntervalSeconds,
+            @Value("${app.verification.return-code-in-response:false}") boolean returnCodeInResponse,
+            @Value("${app.verification.console-log-code:false}") boolean consoleLogCode
     ) {
         this.mailSenderProvider = mailSenderProvider;
         this.mailFrom = mailFrom;
         this.captchaExpireSeconds = captchaExpireSeconds;
         this.emailCodeExpireSeconds = emailCodeExpireSeconds;
+        this.emailCodeResendIntervalSeconds = emailCodeResendIntervalSeconds;
         this.returnCodeInResponse = returnCodeInResponse;
         this.consoleLogCode = consoleLogCode;
     }
@@ -115,17 +120,30 @@ public class VerificationCodeService {
 
         cleanupExpired();
 
-        String code = String.format("%06d", random.nextInt(1_000_000));
         String storeKey = emailStoreKey(purpose, targetKey);
-        emailCodeStore.put(
-                storeKey,
-                new CodeEntry(hash(code), Instant.now().plusSeconds(emailCodeExpireSeconds))
-        );
+        Instant now = Instant.now();
+        Instant nextAllowedAt;
+        synchronized (emailSendNextAllowedStore) {
+            nextAllowedAt = emailSendNextAllowedStore.get(storeKey);
+            if (nextAllowedAt != null && nextAllowedAt.isAfter(now)) {
+                long remainingSeconds = Math.max(1, Duration.between(now, nextAllowedAt).toSeconds());
+                throw new BadRequestException("请求过于频繁，请 " + remainingSeconds + " 秒后重试");
+            }
+            nextAllowedAt = now.plusSeconds(emailCodeResendIntervalSeconds);
+            emailSendNextAllowedStore.put(storeKey, nextAllowedAt);
+        }
 
+        String code = String.format("%06d", random.nextInt(1_000_000));
         boolean sent = sendEmail(receiverEmail, purpose, code);
         if (!sent && !returnCodeInResponse) {
+            emailSendNextAllowedStore.remove(storeKey, nextAllowedAt);
             throw new ExternalServiceException("邮箱验证码发送失败，请检查 SMTP 配置");
         }
+
+        emailCodeStore.put(
+                storeKey,
+                new CodeEntry(hash(code), now.plusSeconds(emailCodeExpireSeconds))
+        );
         if (consoleLogCode) {
             log.info("Email verification code purpose={}, target={}, receiver={}, code={}",
                     purpose, targetKey, receiverEmail, code);
@@ -247,6 +265,7 @@ public class VerificationCodeService {
         Instant now = Instant.now();
         captchaStore.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
         emailCodeStore.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
+        emailSendNextAllowedStore.entrySet().removeIf(entry -> !entry.getValue().isAfter(now));
     }
 
     private String hash(String value) {
