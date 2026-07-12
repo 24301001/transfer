@@ -12,6 +12,7 @@ import com.transfer.dto.UpdateProfileNameRequest;
 import com.transfer.enums.VerificationPurpose;
 import com.transfer.model.UserAccount;
 import com.transfer.repository.UserAccountRepository;
+import com.transfer.security.RedisTokenSessionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,17 +23,23 @@ public class ProfileService {
     private final UserAccountRepository userAccountRepository;
     private final OperationLogService operationLogService;
     private final VerificationCodeService verificationCodeService;
+    private final SliderCaptchaService sliderCaptchaService;
+    private final RedisTokenSessionService tokenSessionService;
 
     public ProfileService(
             AuthService authService,
             UserAccountRepository userAccountRepository,
             OperationLogService operationLogService,
-            VerificationCodeService verificationCodeService
+            VerificationCodeService verificationCodeService,
+            SliderCaptchaService sliderCaptchaService,
+            RedisTokenSessionService tokenSessionService
     ) {
         this.authService = authService;
         this.userAccountRepository = userAccountRepository;
         this.operationLogService = operationLogService;
         this.verificationCodeService = verificationCodeService;
+        this.sliderCaptchaService = sliderCaptchaService;
+        this.tokenSessionService = tokenSessionService;
     }
 
     @Transactional(readOnly = true)
@@ -60,13 +67,14 @@ public class ProfileService {
     @Transactional(readOnly = true)
     public EmailCodeResponse sendChangePasswordEmailCode(
             String authorizationHeader,
-            ProfileEmailCodeRequest request
+            ProfileEmailCodeRequest request,
+            String fingerprintHash
     ) {
         UserAccount user = authService.loadCurrentUser(authorizationHeader);
-        verificationCodeService.validateCaptcha(request.captchaId(), request.captchaCode());
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             throw new BadRequestException("当前账号未绑定邮箱，无法发送邮箱验证码");
         }
+        sliderCaptchaService.consumeVerificationToken(request.sliderToken(), fingerprintHash);
         return verificationCodeService.sendEmailCode(
                 VerificationPurpose.CHANGE_PASSWORD,
                 authService.changePasswordTargetKey(user),
@@ -77,7 +85,6 @@ public class ProfileService {
     @Transactional
     public MessageResponse changePassword(String authorizationHeader, ChangePasswordRequest request) {
         UserAccount user = authService.loadCurrentUser(authorizationHeader);
-        verificationCodeService.validateCaptcha(request.captchaId(), request.captchaCode());
 
         if (!PasswordUtils.matches(request.oldPassword(), user.getPasswordHash())) {
             throw new UnauthorizedException("原密码错误");
@@ -94,6 +101,7 @@ public class ProfileService {
 
         user.setPasswordHash(PasswordUtils.hash(request.newPassword()));
         userAccountRepository.save(user);
+        tokenSessionService.revokeAll(user.getId());
         operationLogService.record(
                 user.getId(),
                 "CHANGE_PASSWORD",
@@ -103,7 +111,7 @@ public class ProfileService {
                 user.getUsername()
         );
 
-        return new MessageResponse("密码修改成功，请重新登录");
+        return new MessageResponse("密码修改成功，所有登录会话已失效，请重新登录");
     }
 
     private String normalizeRequired(String value, String fieldName) {

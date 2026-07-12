@@ -93,6 +93,25 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, ex.getMessage(), request);
     }
 
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(
+            ForbiddenException ex,
+            HttpServletRequest request
+    ) {
+        recordException(request, ex);
+        return build(HttpStatus.FORBIDDEN, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleServiceUnavailable(
+            ServiceUnavailableException ex,
+            HttpServletRequest request
+    ) {
+        recordException(request, ex);
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+    }
+
     @ExceptionHandler(ExternalServiceException.class)
     public ResponseEntity<ErrorResponse> handleExternalService(
             ExternalServiceException ex,
@@ -125,7 +144,7 @@ public class GlobalExceptionHandler {
         recordException(request, ex);
         return build(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                ex.getMessage(),
+                "服务器内部错误，请稍后重试",
                 request
         );
     }

@@ -1,0 +1,109 @@
+{
+  "paths": {
+    "/api/v1/auth/slider-captcha/challenge": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "创建滑块验证码挑战",
+        "responses": {
+          "200": {
+            "description": "滑块挑战",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SliderCaptchaChallengeResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/slider-captcha/verify": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "校验滑块位置并签发一次性凭证",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/SliderCaptchaVerifyRequest"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "验证通过",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/SliderCaptchaVerifyResponse"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "注销当前JWT会话",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "注销成功"}}
+      }
+    },
+    "/api/v1/auth/logout-all": {
+      "post": {
+        "tags": ["认证"],
+        "summary": "注销当前用户全部JWT会话",
+        "security": [{"bearerAuth": []}],
+        "responses": {"200": {"description": "注销成功"}}
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "SliderCaptchaChallengeResponse": {
+        "type": "object",
+        "properties": {
+          "captchaId": {"type": "string"},
+          "backgroundImageBase64": {"type": "string"},
+          "puzzleImageBase64": {"type": "string"},
+          "puzzleY": {"type": "integer"},
+          "imageWidth": {"type": "integer", "example": 320},
+          "imageHeight": {"type": "integer", "example": 160},
+          "pieceWidth": {"type": "integer", "example": 52},
+          "expireSeconds": {"type": "integer", "example": 120}
+        }
+      },
+      "SliderCaptchaVerifyRequest": {
+        "type": "object",
+        "required": ["captchaId", "sliderX"],
+        "properties": {
+          "captchaId": {"type": "string"},
+          "sliderX": {"type": "integer", "minimum": 0}
+        }
+      },
+      "SliderCaptchaVerifyResponse": {
+        "type": "object",
+        "properties": {
+          "sliderToken": {"type": "string"},
+          "expireSeconds": {"type": "integer", "example": 120}
+        }
+      },
+      "EmailCodeRequest": {
+        "type": "object",
+        "required": ["purpose", "sliderToken"],
+        "properties": {
+          "purpose": {"type": "string", "enum": ["REGISTER", "LOGIN", "RESET_PASSWORD"]},
+          "username": {"type": "string"},
+          "email": {"type": "string", "format": "email"},
+          "sliderToken": {"type": "string"}
+        }
+      }
+    }
+  }
+}

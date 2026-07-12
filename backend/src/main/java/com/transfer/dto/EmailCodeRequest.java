@@ -10,7 +10,6 @@ public record EmailCodeRequest(
         @NotNull VerificationPurpose purpose,
         @Size(max = 64) String username,
         @Email @Size(max = 128) String email,
-        @NotBlank String captchaId,
-        @NotBlank String captchaCode
+        @NotBlank String sliderToken
 ) {
 }

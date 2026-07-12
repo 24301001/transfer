@@ -5,8 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 public record LoginRequest(
         @NotBlank String username,
         @NotBlank String password,
-        @NotBlank String emailCode,
-        @NotBlank String captchaId,
-        @NotBlank String captchaCode
+        @NotBlank String emailCode
 ) {
 }

@@ -10,6 +10,7 @@ import com.transfer.enums.UserRole;
 import com.transfer.enums.UserStatus;
 import com.transfer.model.UserAccount;
 import com.transfer.repository.UserAccountRepository;
+import com.transfer.security.RedisTokenSessionService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -24,10 +25,16 @@ public class UserService {
 
     private final UserAccountRepository userAccountRepository;
     private final OperationLogService operationLogService;
+    private final RedisTokenSessionService tokenSessionService;
 
-    public UserService(UserAccountRepository userAccountRepository, OperationLogService operationLogService) {
+    public UserService(
+            UserAccountRepository userAccountRepository,
+            OperationLogService operationLogService,
+            RedisTokenSessionService tokenSessionService
+    ) {
         this.userAccountRepository = userAccountRepository;
         this.operationLogService = operationLogService;
+        this.tokenSessionService = tokenSessionService;
     }
 
     @Transactional(readOnly = true)
@@ -95,6 +102,7 @@ public class UserService {
         }
 
         UserAccount saved = userAccountRepository.save(user);
+        tokenSessionService.revokeAll(saved.getId());
         operationLogService.record(
                 operatorUserId,
                 "UPDATE_USER",
@@ -115,6 +123,7 @@ public class UserService {
         validateLastEnabledAdmin(user, user.getRole(), status);
         user.setStatus(status);
         UserAccount saved = userAccountRepository.save(user);
+        tokenSessionService.revokeAll(saved.getId());
         operationLogService.record(
                 operatorUserId,
                 "UPDATE_USER_STATUS",
@@ -146,6 +155,7 @@ public class UserService {
         UserAccount user = findUser(id);
         validateLastEnabledAdmin(user, null, UserStatus.DISABLED);
         userAccountRepository.delete(user);
+        tokenSessionService.revokeAll(id);
         operationLogService.record(
                 operatorUserId,
                 "DELETE_USER",

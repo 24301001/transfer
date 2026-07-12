@@ -8,8 +8,6 @@ public record PasswordResetRequest(
         @NotBlank @Size(max = 64) String username,
         @NotBlank @Email @Size(max = 128) String email,
         @NotBlank @Size(min = 8, max = 128) String newPassword,
-        @NotBlank String emailCode,
-        @NotBlank String captchaId,
-        @NotBlank String captchaCode
+        @NotBlank String emailCode
 ) {
 }

@@ -6,7 +6,9 @@ import com.transfer.dto.EmailCodeResponse;
 import com.transfer.dto.MessageResponse;
 import com.transfer.dto.ProfileEmailCodeRequest;
 import com.transfer.dto.UpdateProfileNameRequest;
+import com.transfer.security.ClientFingerprintService;
 import com.transfer.service.ProfileService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,9 +23,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProfileController {
 
     private final ProfileService profileService;
+    private final ClientFingerprintService clientFingerprintService;
 
-    public ProfileController(ProfileService profileService) {
+    public ProfileController(
+            ProfileService profileService,
+            ClientFingerprintService clientFingerprintService
+    ) {
         this.profileService = profileService;
+        this.clientFingerprintService = clientFingerprintService;
     }
 
     @GetMapping
@@ -44,9 +51,14 @@ public class ProfileController {
     @PostMapping("/password/email-code")
     public EmailCodeResponse sendPasswordEmailCode(
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
-            @Valid @RequestBody ProfileEmailCodeRequest request
+            @Valid @RequestBody ProfileEmailCodeRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return profileService.sendChangePasswordEmailCode(authorizationHeader, request);
+        return profileService.sendChangePasswordEmailCode(
+                authorizationHeader,
+                request,
+                clientFingerprintService.fingerprint(servletRequest)
+        );
     }
 
     @PutMapping("/password")
