@@ -950,6 +950,98 @@ public class IncidentService {
     }
 
     /**
+ * 基于事故最新预测结果，重新生成自然语言解释。
+ */
+@Transactional
+public PredictionDisplayResponse regenerateLatestPredictionExplanation(
+        Long incidentId,
+        Long operatorUserId
+) {
+    Incident incident = findIncident(incidentId);
+
+    PredictionResult result =
+            predictionResultRepository
+                    .findFirstByIncidentIdOrderByCreatedAtDesc(
+                            incidentId
+                    )
+                    .orElseThrow(
+                            () -> new ResourceNotFoundException(
+                                    "Prediction result not found for incident: "
+                                            + incidentId
+                            )
+                    );
+
+    List<String> riskFactors =
+            result.getRiskFactors() == null
+                    || result.getRiskFactors().isBlank()
+                    ? List.of()
+                    : List.of(result.getRiskFactors());
+
+    PredictionOutcome outcome =
+            new PredictionOutcome(
+                    result.getAccidentType(),
+                    result.getRiskLevel(),
+                    result.getCongestionDurationMinutes(),
+                    result.getRecoveryDurationMinutes(),
+                    result.getConfidence(),
+                    result.getModelVersion(),
+                    result.getSuggestions(),
+                    riskFactors,
+                    result.getEvidenceSummary()
+            );
+
+    String explanation =
+            deepSeekClient.explain(
+                    outcome,
+                    incident.getLocationName(),
+                    incident.getDescription()
+            );
+
+    if (explanation == null || explanation.isBlank()) {
+        throw new ExternalServiceException(
+                "Failed to generate prediction explanation"
+        );
+    }
+
+    explanation = explanation.trim();
+
+    // prediction_results.explanation 字段最大长度为 1500
+    if (explanation.length() > 1500) {
+        explanation = explanation.substring(0, 1500);
+    }
+
+    result.setExplanation(explanation);
+
+    PredictionResult saved =
+            predictionResultRepository.save(result);
+
+    operationLogService.record(
+            operatorUserId,
+            "REGENERATE_PREDICTION_EXPLANATION",
+            "PredictionResult",
+            saved.getId().toString(),
+            null,
+            "incidentId=" + incidentId
+    );
+
+    realtimeService.publish(
+            "PREDICTION_EXPLANATION_REGENERATED",
+            Map.of(
+                    "incidentId",
+                    incidentId,
+
+                    "predictionResultId",
+                    saved.getId()
+            )
+    );
+
+    return PredictionDisplayResponse.from(
+            incident,
+            saved
+    );
+}
+
+    /**
      * 查询最新预测结果。
      */
     @Transactional(readOnly = true)
