@@ -1,6 +1,6 @@
 import request from '../request'
 
-// ====== 枚举映射工具 ======
+// ====== ????????? ======
 
 const ROLE_MAP = {
   FIELD_OFFICER: 'POLICE',
@@ -17,13 +17,13 @@ const ROLE_MAP_REVERSE = {
 }
 
 const STATUS_MAP = {
-  ENABLED: '启用',
-  DISABLED: '禁用',
+  ENABLED: '???',
+  DISABLED: '???',
 }
 
 const STATUS_MAP_REVERSE = {
-  '启用': 'ENABLED',
-  '禁用': 'DISABLED',
+  '???': 'ENABLED',
+  '???': 'DISABLED',
 }
 
 function mapRoleToFrontend(backendRole) {
@@ -71,10 +71,10 @@ function transformLoginResponse(data) {
   }
 }
 
-// ====== 验证码 ======
+// ====== ????? ======
 
 /**
- * 获取图形验证码
+ * ???????????
  * GET /api/v1/auth/captcha
  * @returns {Promise<{captchaId: string, imageBase64: string, expireSeconds: number}>}
  */
@@ -84,9 +84,33 @@ export async function getCaptcha() {
 }
 
 /**
- * 发送邮箱验证码
+ * ??????????????
+ * POST /api/v1/auth/slider-captcha/challenge
+ * @returns {Promise<SliderCaptchaChallenge>}
+ */
+export async function getSliderCaptchaChallenge() {
+  const res = await request.post('/v1/auth/slider-captcha/challenge')
+  return res.data
+}
+
+/**
+ * ?????????????????
+ * POST /api/v1/auth/slider-captcha/verify
+ * @param {{ captchaId: string, sliderX: number }} data
+ * @returns {Promise<{sliderToken: string, expireSeconds: number}>}
+ */
+export async function verifySliderCaptcha(data) {
+  const res = await request.post('/v1/auth/slider-captcha/verify', {
+    captchaId: data.captchaId,
+    sliderX: data.sliderX,
+  })
+  return res.data
+}
+
+/**
+ * ????????????????????????????? sliderToken??
  * POST /api/v1/auth/email-code
- * @param {{ purpose: string, username?: string, email?: string, captchaId: string, captchaCode: string }} data
+ * @param {{ purpose: string, username?: string, email?: string, sliderToken: string }} data
  * @returns {Promise<{message: string, expireSeconds: number, devCode?: string}>}
  */
 export async function sendEmailCode(data) {
@@ -94,16 +118,15 @@ export async function sendEmailCode(data) {
     purpose: data.purpose,
     username: data.username || undefined,
     email: data.email || undefined,
-    captchaId: data.captchaId,
-    captchaCode: data.captchaCode,
+    sliderToken: data.sliderToken,
   })
   return res.data
 }
 
-// ====== 认证 ======
+// ====== ??? ======
 
 /**
- * 登录
+ * ???
  * POST /api/v1/auth/login
  * @param {{ username: string, password: string }} data
  */
@@ -111,6 +134,7 @@ export async function login(data) {
   const res = await request.post('/v1/auth/login', {
     username: data.username,
     password: data.password,
+    sliderToken: data.sliderToken,
   })
   return {
     code: 200,
@@ -119,9 +143,9 @@ export async function login(data) {
 }
 
 /**
- * 注册
+ * ???
  * POST /api/v1/auth/register
- * @param {{ fullName: string, username: string, phone?: string, email: string, role: string, password: string, emailCode: string, captchaId: string, captchaCode: string }} data
+ * @param {{ fullName: string, username: string, phone?: string, email: string, role: string, password: string, emailCode: string, sliderToken?: string }} data
  */
 export async function register(data) {
   const res = await request.post('/v1/auth/register', {
@@ -132,8 +156,7 @@ export async function register(data) {
     role: mapRoleToBackend(data.role),
     password: data.password,
     emailCode: data.emailCode,
-    captchaId: data.captchaId,
-    captchaCode: data.captchaCode,
+    sliderToken: data.sliderToken,
   })
   return {
     code: 200,
@@ -142,7 +165,7 @@ export async function register(data) {
 }
 
 /**
- * 重置密码
+ * ??????
  * POST /api/v1/auth/password/reset
  */
 export async function resetPassword(data) {
@@ -151,14 +174,12 @@ export async function resetPassword(data) {
     email: data.email,
     newPassword: data.newPassword,
     emailCode: data.emailCode,
-    captchaId: data.captchaId,
-    captchaCode: data.captchaCode,
   })
   return { code: 200, data: res.data }
 }
 
 /**
- * 获取当前用户信息
+ * ????????????
  * GET /api/v1/auth/me
  */
 export async function getUserInfo() {
@@ -169,10 +190,10 @@ export async function getUserInfo() {
   }
 }
 
-// ====== 个人中心 ======
+// ====== ?????? ======
 
 /**
- * 获取个人资料
+ * ?????????
  * GET /api/v1/profile
  */
 export async function getProfile() {
@@ -184,7 +205,7 @@ export async function getProfile() {
 }
 
 /**
- * 更新姓名
+ * ??????
  * PUT /api/v1/profile/name
  * @param {{ fullName: string }} data
  */
@@ -199,7 +220,7 @@ export async function updateProfileName(data) {
 }
 
 /**
- * 发送修改密码的邮箱验证码（个人中心）
+ * ????????????????????????????
  * POST /api/v1/profile/password/email-code
  */
 export async function sendProfilePasswordEmailCode(data) {
@@ -211,7 +232,7 @@ export async function sendProfilePasswordEmailCode(data) {
 }
 
 /**
- * 修改密码（个人中心）
+ * ???????????????
  * PUT /api/v1/profile/password
  */
 export async function changeProfilePassword(data) {
@@ -225,10 +246,10 @@ export async function changeProfilePassword(data) {
   return { code: 200, data: res.data }
 }
 
-// ====== 用户管理（管理员） ======
+// ====== ?????????????? ======
 
 /**
- * 用户列表
+ * ??????
  * GET /api/v1/admin/users
  */
 export async function getUserList(params) {
@@ -248,7 +269,7 @@ export async function getUserList(params) {
 }
 
 /**
- * 更新用户
+ * ??????
  * PUT /api/v1/admin/users/{id}
  */
 export async function updateUser(data) {
@@ -266,7 +287,7 @@ export async function updateUser(data) {
 }
 
 /**
- * 删除用户
+ * ??????
  * DELETE /api/v1/admin/users/{id}
  */
 export async function deleteUser(data) {

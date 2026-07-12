@@ -3,7 +3,7 @@ package com.transfer.service;
 import com.transfer.common.BadRequestException;
 import com.transfer.dto.SliderCaptchaChallengeResponse;
 import com.transfer.dto.SliderCaptchaVerifyResponse;
-import com.transfer.verification.RedisVerificationStore;
+import com.transfer.verification.VerificationStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -35,14 +35,14 @@ public class SliderCaptchaService {
     private static final int PIECE_SIZE = 52;
 
     private final SecureRandom random = new SecureRandom();
-    private final RedisVerificationStore redisStore;
+    private final VerificationStore redisStore;
     private final int challengeExpireSeconds;
     private final int tokenExpireSeconds;
     private final int tolerancePixels;
     private final int maxAttempts;
 
     public SliderCaptchaService(
-            RedisVerificationStore redisStore,
+            VerificationStore redisStore,
             @Value("${app.verification.slider-challenge-expire-seconds:120}") int challengeExpireSeconds,
             @Value("${app.verification.slider-token-expire-seconds:120}") int tokenExpireSeconds,
             @Value("${app.verification.slider-tolerance-pixels:6}") int tolerancePixels,

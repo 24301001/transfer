@@ -10,7 +10,7 @@ import com.transfer.enums.UserRole;
 import com.transfer.enums.UserStatus;
 import com.transfer.model.UserAccount;
 import com.transfer.repository.UserAccountRepository;
-import com.transfer.security.RedisTokenSessionService;
+import com.transfer.security.TokenSessionService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -25,12 +25,12 @@ public class UserService {
 
     private final UserAccountRepository userAccountRepository;
     private final OperationLogService operationLogService;
-    private final RedisTokenSessionService tokenSessionService;
+    private final TokenSessionService tokenSessionService;
 
     public UserService(
             UserAccountRepository userAccountRepository,
             OperationLogService operationLogService,
-            RedisTokenSessionService tokenSessionService
+            TokenSessionService tokenSessionService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.operationLogService = operationLogService;

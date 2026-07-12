@@ -4,7 +4,7 @@ import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
 import com.transfer.dto.EmailCodeResponse;
 import com.transfer.enums.VerificationPurpose;
-import com.transfer.verification.RedisVerificationStore;
+import com.transfer.verification.VerificationStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -27,7 +27,7 @@ public class VerificationCodeService {
 
     private final SecureRandom random = new SecureRandom();
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
-    private final RedisVerificationStore redisStore;
+    private final VerificationStore redisStore;
     private final String mailFrom;
     private final int emailCodeExpireSeconds;
     private final int emailCodeResendIntervalSeconds;
@@ -37,7 +37,7 @@ public class VerificationCodeService {
 
     public VerificationCodeService(
             ObjectProvider<JavaMailSender> mailSenderProvider,
-            RedisVerificationStore redisStore,
+            VerificationStore redisStore,
             @Value("${app.mail.from:no-reply@transfer.local}") String mailFrom,
             @Value("${app.verification.email-code-expire-seconds:300}") int emailCodeExpireSeconds,
             @Value("${app.verification.email-code-resend-interval-seconds:60}") int emailCodeResendIntervalSeconds,

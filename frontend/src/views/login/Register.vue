@@ -51,15 +51,9 @@
         </el-select>
       </el-form-item>
 
-      <!-- 图形验证码 -->
-      <el-form-item prop="captchaCode">
-        <div class="captcha-row">
-          <el-input v-model="form.captchaCode" placeholder="图形验证码" maxlength="5" class="captcha-input" />
-          <div class="captcha-image" @click="loadCaptcha" v-if="captchaImage">
-            <img :src="captchaImage" alt="验证码" />
-            <span class="captcha-refresh">刷新</span>
-          </div>
-        </div>
+      <!-- 滑块验证码 -->
+      <el-form-item prop="sliderPass">
+        <SliderCaptcha ref="sliderRef" @verified="onSliderVerified" @error="onSliderError" />
       </el-form-item>
 
       <!-- 邮箱验证码 -->
@@ -70,7 +64,7 @@
             class="send-code-btn"
             size="small"
             :loading="emailSending"
-            :disabled="emailCountdown > 0 || !form.captchaCode || !form.email"
+            :disabled="emailCountdown > 0 || !sliderVerified || !form.email"
             @click="handleSendEmailCode"
           >
             {{ emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码' }}
@@ -94,21 +88,25 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { register, getCaptcha, sendEmailCode as apiSendEmailCode } from '@/services/modules/user'
+import { register, sendEmailCode as apiSendEmailCode } from '@/services/modules/user'
 import { ROLE_OPTIONS, getRoleByKey } from '@/utils/role'
 import { ElMessage } from 'element-plus'
+import SliderCaptcha from '@/components/SliderCaptcha.vue'
+
+defineOptions({ name: 'Register' })
 
 const router = useRouter()
 const userStore = useUserStore()
 const formRef = ref(null)
+const sliderRef = ref(null)
 const loading = ref(false)
 const emailSending = ref(false)
 const emailCountdown = ref(0)
-const captchaId = ref('')
-const captchaImage = ref('')
+const sliderVerified = ref(false)
+const sliderToken = ref('')
 let countdownTimer = null
 
 const form = reactive({
@@ -119,7 +117,6 @@ const form = reactive({
   password: '',
   confirmPassword: '',
   role: '',
-  captchaCode: '',
   emailCode: '',
 })
 
@@ -150,24 +147,25 @@ const rules = {
     { validator: validatePass2, trigger: 'blur' },
   ],
   role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  captchaCode: [{ required: true, message: '请输入图形验证码', trigger: 'blur' }],
   emailCode: [{ required: true, message: '请输入邮箱验证码', trigger: 'blur' }],
 }
 
-async function loadCaptcha() {
-  try {
-    const data = await getCaptcha()
-    captchaId.value = data.captchaId
-    captchaImage.value = data.imageBase64
-    form.captchaCode = ''
-  } catch {
-    // 忽略
-  }
+function onSliderVerified(token) {
+  sliderVerified.value = true
+  sliderToken.value = token
+}
+
+function onSliderError(msg) {
+  ElMessage.warning(msg || '验证码加载失败')
 }
 
 async function handleSendEmailCode() {
-  if (!form.email || !form.captchaCode || !captchaId.value) {
-    ElMessage.warning('请先填写邮箱和图形验证码')
+  if (!form.email) {
+    ElMessage.warning('请先填写邮箱')
+    return
+  }
+  if (!sliderToken.value) {
+    ElMessage.warning('请先完成滑块验证')
     return
   }
   emailSending.value = true
@@ -175,8 +173,7 @@ async function handleSendEmailCode() {
     const res = await apiSendEmailCode({
       purpose: 'REGISTER',
       email: form.email,
-      captchaId: captchaId.value,
-      captchaCode: form.captchaCode,
+      sliderToken: sliderToken.value,
     })
     ElMessage.success(res.message || '验证码已发送')
     if (res.devCode) {
@@ -207,6 +204,11 @@ async function handleRegister() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
+  if (!sliderVerified.value) {
+    ElMessage.warning('请先完成滑块验证')
+    return
+  }
+
   loading.value = true
   try {
     const res = await register({
@@ -217,8 +219,7 @@ async function handleRegister() {
       password: form.password,
       role: form.role,
       emailCode: form.emailCode,
-      captchaId: captchaId.value,
-      captchaCode: form.captchaCode,
+      sliderToken: sliderToken.value,
     })
     if (res.code === 200) {
       userStore.setUser(res.data.token, res.data.userInfo)
@@ -227,13 +228,15 @@ async function handleRegister() {
       router.push(role ? role.home : '/')
     }
   } catch {
-    loadCaptcha()
+    // 滑块失效后自动重置
+    sliderVerified.value = false
+    sliderToken.value = ''
+    sliderRef.value?.reset()
   } finally {
     loading.value = false
   }
 }
 
-onMounted(loadCaptcha)
 onBeforeUnmount(() => clearInterval(countdownTimer))
 </script>
 
@@ -289,48 +292,6 @@ onBeforeUnmount(() => clearInterval(countdownTimer))
   :deep(.el-select) {
     width: 100%;
   }
-}
-
-.captcha-row {
-  display: flex;
-  gap: 10px;
-
-  .captcha-input { flex: 1; }
-}
-
-.captcha-image {
-  flex-shrink: 0;
-  width: 130px;
-  height: 48px;
-  border-radius: 8px;
-  overflow: hidden;
-  cursor: pointer;
-  position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: #fff;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  .captcha-refresh {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.45);
-    opacity: 0;
-    transition: opacity 0.2s;
-    letter-spacing: 0.05em;
-  }
-
-  &:hover .captcha-refresh { opacity: 1; }
 }
 
 .email-code-row {
