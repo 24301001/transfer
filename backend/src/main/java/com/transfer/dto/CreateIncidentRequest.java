@@ -1,6 +1,7 @@
 package com.transfer.dto;
 
 import com.transfer.enums.CoordinateType;
+
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;

@@ -1,5 +1,20 @@
 package com.transfer.controller;
 
+import java.util.List;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.transfer.dto.CommandDispatchRequest;
 import com.transfer.dto.CommandIncidentDetailResponse;
 import com.transfer.dto.CommandIncidentSummaryResponse;
@@ -21,26 +36,13 @@ import com.transfer.model.DispatchTask;
 import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
 import com.transfer.model.IncidentAttachment;
+import com.transfer.security.RequestSecurityAttributes;
+import com.transfer.security.RequireRoles;
 import com.transfer.service.CommandCenterService;
 import com.transfer.service.EmergencyVehicleDispatchService;
-import com.transfer.security.RequireRoles;
-import com.transfer.security.RequestSecurityAttributes;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequireRoles({UserRole.ADMIN, UserRole.COMMAND_CENTER})

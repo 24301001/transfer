@@ -1,15 +1,16 @@
 package com.transfer.model;
 
+import java.time.LocalDateTime;
+
 import com.transfer.enums.CoordinateType;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
-
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "incidents")

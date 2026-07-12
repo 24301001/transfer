@@ -1,9 +1,10 @@
 package com.transfer.repository;
 
-import com.transfer.model.IncidentAttachment;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
+import com.transfer.model.IncidentAttachment;
 
 public interface IncidentAttachmentRepository extends JpaRepository<IncidentAttachment, Long> {
     List<IncidentAttachment> findByIncidentIdOrderByCreatedAtAsc(Long incidentId);
