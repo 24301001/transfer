@@ -106,6 +106,7 @@ const menuConfig = {
   [ROLES.ADMIN.key]: [
     { path: '/admin/users', label: '用户管理', icon: User },
     { path: '/admin/logs', label: '操作日志', icon: List },
+    { path: '/admin/health', label: '系统健康', icon: Monitor },
   ],
 }
 
@@ -137,7 +138,9 @@ onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
 onUnmounted(() => window.removeEventListener('scroll', onScroll))
 
 function handleCommand(command) {
-  if (command === 'logout') {
+  if (command === 'profile') {
+    router.push('/profile')
+  } else if (command === 'logout') {
     ElMessageBox.confirm('确认退出登录？', '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
       .then(() => {
         userStore.logout()

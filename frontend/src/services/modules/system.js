@@ -1,6 +1,23 @@
 import request from '../request'
 
 /**
+ * 系统健康检查
+ * GET /api/health
+ * @returns {Promise<{status: string, time: string, dependencies: object}>}
+ */
+export async function getSystemHealth() {
+  const res = await request.get('/health')
+  return {
+    code: 200,
+    data: {
+      status: res.data.status,
+      time: res.data.time,
+      dependencies: res.data.dependencies || {},
+    },
+  }
+}
+
+/**
  * 操作日志（仅用户账号操作）
  * GET /api/v1/admin/operation-logs
  * @param {{ page?: number, pageSize?: number, operationType?: string, keyword?: string, startTime?: string, endTime?: string }} params

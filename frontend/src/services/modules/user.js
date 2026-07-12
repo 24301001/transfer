@@ -2,7 +2,6 @@ import request from '../request'
 
 // ====== 枚举映射工具 ======
 
-/** 后端角色 → 前端角色 */
 const ROLE_MAP = {
   FIELD_OFFICER: 'POLICE',
   COMMAND_CENTER: 'COMMAND',
@@ -10,7 +9,6 @@ const ROLE_MAP = {
   ADMIN: 'ADMIN',
 }
 
-/** 前端角色 → 后端角色 */
 const ROLE_MAP_REVERSE = {
   POLICE: 'FIELD_OFFICER',
   COMMAND: 'COMMAND_CENTER',
@@ -18,13 +16,11 @@ const ROLE_MAP_REVERSE = {
   ADMIN: 'ADMIN',
 }
 
-/** 后端用户状态 → 前端中文状态 */
 const STATUS_MAP = {
   ENABLED: '启用',
   DISABLED: '禁用',
 }
 
-/** 前端中文状态 → 后端状态 */
 const STATUS_MAP_REVERSE = {
   '启用': 'ENABLED',
   '禁用': 'DISABLED',
@@ -46,7 +42,6 @@ function mapStatusToBackend(frontendStatus) {
   return STATUS_MAP_REVERSE[frontendStatus] || frontendStatus
 }
 
-/** 转换后端用户对象 → 前端用户对象 */
 function transformUser(user) {
   return {
     id: user.id,
@@ -61,7 +56,6 @@ function transformUser(user) {
   }
 }
 
-/** 转换后端登录/注册响应 → 前端格式 */
 function transformLoginResponse(data) {
   return {
     token: data.token,
@@ -69,13 +63,44 @@ function transformLoginResponse(data) {
       id: data.user.id,
       username: data.user.username,
       nickname: data.user.fullName,
+      email: data.user.email || '',
+      phone: data.user.phone || '',
       role: mapRoleToFrontend(data.user.role),
       status: mapStatusToFrontend(data.user.status),
     },
   }
 }
 
-// ====== API 函数 ======
+// ====== 验证码 ======
+
+/**
+ * 获取图形验证码
+ * GET /api/v1/auth/captcha
+ * @returns {Promise<{captchaId: string, imageBase64: string, expireSeconds: number}>}
+ */
+export async function getCaptcha() {
+  const res = await request.get('/v1/auth/captcha')
+  return res.data
+}
+
+/**
+ * 发送邮箱验证码
+ * POST /api/v1/auth/email-code
+ * @param {{ purpose: string, username?: string, email?: string, captchaId: string, captchaCode: string }} data
+ * @returns {Promise<{message: string, expireSeconds: number, devCode?: string}>}
+ */
+export async function sendEmailCode(data) {
+  const res = await request.post('/v1/auth/email-code', {
+    purpose: data.purpose,
+    username: data.username || undefined,
+    email: data.email || undefined,
+    captchaId: data.captchaId,
+    captchaCode: data.captchaCode,
+  })
+  return res.data
+}
+
+// ====== 认证 ======
 
 /**
  * 登录
@@ -83,7 +108,10 @@ function transformLoginResponse(data) {
  * @param {{ username: string, password: string }} data
  */
 export async function login(data) {
-  const res = await request.post('/v1/auth/login', data)
+  const res = await request.post('/v1/auth/login', {
+    username: data.username,
+    password: data.password,
+  })
   return {
     code: 200,
     data: transformLoginResponse(res.data),
@@ -93,19 +121,40 @@ export async function login(data) {
 /**
  * 注册
  * POST /api/v1/auth/register
- * @param {{ username: string, nickname: string, password: string, role: string }} data
+ * @param {{ fullName: string, username: string, phone?: string, email: string, role: string, password: string, emailCode: string, captchaId: string, captchaCode: string }} data
  */
 export async function register(data) {
   const res = await request.post('/v1/auth/register', {
-    fullName: data.nickname,
+    fullName: data.nickname || data.fullName,
     username: data.username,
-    password: data.password,
+    phone: data.phone || undefined,
+    email: data.email,
     role: mapRoleToBackend(data.role),
+    password: data.password,
+    emailCode: data.emailCode,
+    captchaId: data.captchaId,
+    captchaCode: data.captchaCode,
   })
   return {
     code: 200,
     data: transformLoginResponse(res.data),
   }
+}
+
+/**
+ * 重置密码
+ * POST /api/v1/auth/password/reset
+ */
+export async function resetPassword(data) {
+  const res = await request.post('/v1/auth/password/reset', {
+    username: data.username,
+    email: data.email,
+    newPassword: data.newPassword,
+    emailCode: data.emailCode,
+    captchaId: data.captchaId,
+    captchaCode: data.captchaCode,
+  })
+  return { code: 200, data: res.data }
 }
 
 /**
@@ -120,15 +169,71 @@ export async function getUserInfo() {
   }
 }
 
+// ====== 个人中心 ======
+
+/**
+ * 获取个人资料
+ * GET /api/v1/profile
+ */
+export async function getProfile() {
+  const res = await request.get('/v1/profile')
+  return {
+    code: 200,
+    data: transformUser(res.data),
+  }
+}
+
+/**
+ * 更新姓名
+ * PUT /api/v1/profile/name
+ * @param {{ fullName: string }} data
+ */
+export async function updateProfileName(data) {
+  const res = await request.put('/v1/profile/name', {
+    fullName: data.fullName,
+  })
+  return {
+    code: 200,
+    data: transformUser(res.data),
+  }
+}
+
+/**
+ * 发送修改密码的邮箱验证码（个人中心）
+ * POST /api/v1/profile/password/email-code
+ */
+export async function sendProfilePasswordEmailCode(data) {
+  const res = await request.post('/v1/profile/password/email-code', {
+    captchaId: data.captchaId,
+    captchaCode: data.captchaCode,
+  })
+  return res.data
+}
+
+/**
+ * 修改密码（个人中心）
+ * PUT /api/v1/profile/password
+ */
+export async function changeProfilePassword(data) {
+  const res = await request.put('/v1/profile/password', {
+    oldPassword: data.oldPassword,
+    newPassword: data.newPassword,
+    emailCode: data.emailCode,
+    captchaId: data.captchaId,
+    captchaCode: data.captchaCode,
+  })
+  return { code: 200, data: res.data }
+}
+
+// ====== 用户管理（管理员） ======
+
 /**
  * 用户列表
  * GET /api/v1/admin/users
- * @param {{ page?: number, pageSize?: number }} params
  */
 export async function getUserList(params) {
   const backendParams = {}
   if (params) {
-    // 页码转换：前端从1开始 → 后端从0开始
     if (params.page) backendParams.page = params.page - 1
     if (params.pageSize) backendParams.size = params.pageSize
   }
@@ -145,7 +250,6 @@ export async function getUserList(params) {
 /**
  * 更新用户
  * PUT /api/v1/admin/users/{id}
- * @param {{ id: number, nickname?: string, role?: string, status?: string, password?: string }} data
  */
 export async function updateUser(data) {
   const { id, ...rest } = data
@@ -164,7 +268,6 @@ export async function updateUser(data) {
 /**
  * 删除用户
  * DELETE /api/v1/admin/users/{id}
- * @param {{ id: number }} data
  */
 export async function deleteUser(data) {
   await request.delete(`/v1/admin/users/${data.id}`)
