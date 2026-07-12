@@ -27,6 +27,11 @@
         </el-input>
       </el-form-item>
 
+      <!-- 滑块验证码 -->
+      <el-form-item class="lf-item lf-captcha-item">
+        <SliderCaptcha ref="sliderRef" @verified="onSliderVerified" @error="onSliderError" />
+      </el-form-item>
+
       <el-form-item class="lf-item lf-btn-wrap">
         <el-button type="primary" :loading="loading" native-type="submit" class="lf-submit">
           <span v-if="!loading">登 录</span>
@@ -68,11 +73,16 @@ import { login } from '@/services/modules/user'
 import { getRoleByKey } from '@/utils/role'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
+import SliderCaptcha from '@/components/SliderCaptcha.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
+const pageRef = ref(null)
 const formRef = ref(null)
+const sliderRef = ref(null)
 const loading = ref(false)
+const sliderVerified = ref(false)
+const sliderToken = ref('')
 
 const form = reactive({
   username: '',
@@ -84,16 +94,31 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
+function onSliderVerified(token) {
+  sliderVerified.value = true
+  sliderToken.value = token
+}
+
+function onSliderError(msg) {
+  ElMessage.warning(msg || '验证码加载失败，请刷新重试')
+}
+
 async function handleLogin() {
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+
+  if (!sliderVerified.value) {
+    ElMessage.warning('请先完成滑块验证')
+    return
+  }
 
   loading.value = true
   try {
     const res = await login({
       username: form.username,
       password: form.password,
+      sliderToken: sliderToken.value,
     })
     if (res.code === 200) {
       userStore.setUser(res.data.token, res.data.userInfo)
@@ -102,7 +127,10 @@ async function handleLogin() {
       router.push(role ? role.home : '/')
     }
   } catch {
-    // 错误已在拦截器中处理
+    // 登录失败时重置滑块
+    sliderVerified.value = false
+    sliderToken.value = ''
+    sliderRef.value?.reset()
   } finally {
     loading.value = false
   }
@@ -111,6 +139,8 @@ async function handleLogin() {
 function quickLogin(username) {
   form.username = username
   form.password = '123456'
+  // 快捷登录跳过滑块验证
+  sliderVerified.value = true
   handleLogin()
 }
 
@@ -206,6 +236,14 @@ onMounted(() => {
 .lf-btn-wrap {
   margin-top: 4px;
   margin-bottom: 0 !important;
+}
+
+.lf-captcha-item {
+  margin-bottom: 12px !important;
+
+  :deep(.el-form-item__content) {
+    width: 100%;
+  }
 }
 
 .lf-submit {

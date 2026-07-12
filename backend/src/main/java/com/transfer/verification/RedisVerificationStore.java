@@ -12,7 +12,7 @@ import java.time.Duration;
 import java.util.List;
 
 @Component
-public class RedisVerificationStore {
+public class RedisVerificationStore implements VerificationStore {
 
     private static final DefaultRedisScript<String> GET_AND_DELETE_SCRIPT = new DefaultRedisScript<>(
             "local value = redis.call('GET', KEYS[1]); "

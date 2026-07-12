@@ -16,7 +16,7 @@ import java.util.Collection;
 import java.util.Set;
 
 @Service
-public class RedisTokenSessionService {
+public class RedisTokenSessionService implements TokenSessionService {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;

@@ -1,408 +1,1059 @@
 package com.transfer.service;
 
 import com.transfer.adapter.MapProvider;
+
 import com.transfer.common.BadRequestException;
+
 import com.transfer.common.ExternalServiceException;
+
 import com.transfer.dto.MapClientConfigResponse;
+
 import com.transfer.dto.MapLocationResponse;
+
 import com.transfer.dto.MapPointResponse;
+
 import com.transfer.enums.CoordinateType;
+
 import com.transfer.model.Incident;
+
 import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.stereotype.Service;
 
 @Service
 public class MapService {
 
     private final MapProvider mapProvider;
+
     private final String browserAk;
 
+
     public MapService(
+
             MapProvider mapProvider,
 
             @Value("${baidu.map.browser-ak:}")
             String browserAk
+
     ) {
-        this.mapProvider = mapProvider;
-        this.browserAk = browserAk == null
-                ? ""
-                : browserAk.trim();
+
+        this.mapProvider =
+
+                mapProvider;
+
+
+        this.browserAk =
+
+                browserAk == null
+
+                        ? ""
+
+                        : browserAk.trim();
     }
 
+
+    /**
+     * 将坐标转换成百度 BD09 坐标。
+     */
     public MapPointResponse convertToBaidu(
+
             Double longitude,
+
             Double latitude,
+
             CoordinateType coordinateType
+
     ) {
+
         MapProvider.MapPoint point =
-                mapProvider.convertToBaidu(
-                        longitude,
-                        latitude,
-                        coordinateType == null
-                                ? CoordinateType.WGS84
-                                : coordinateType
-                );
+
+                mapProvider
+
+                        .convertToBaidu(
+
+                                longitude,
+
+                                latitude,
+
+                                coordinateType
+
+                                        == null
+
+                                        ? CoordinateType.WGS84
+
+                                        : coordinateType
+                        );
+
 
         return new MapPointResponse(
+
                 point.longitude(),
+
                 point.latitude(),
+
                 point.coordinateType()
         );
     }
 
+
+    /**
+     * 逆地理编码。
+     */
     public MapLocationResponse reverseGeocode(
+
             Double longitude,
+
             Double latitude,
+
             CoordinateType coordinateType
+
     ) {
+
         CoordinateType sourceType =
-                coordinateType == null
+
+                coordinateType
+
+                        == null
+
                         ? CoordinateType.WGS84
+
                         : coordinateType;
 
+
         MapProvider.MapLocation location =
-                mapProvider.reverseGeocode(
-                        longitude,
-                        latitude,
-                        sourceType
-                );
+
+                mapProvider
+
+                        .reverseGeocode(
+
+                                longitude,
+
+                                latitude,
+
+                                sourceType
+                        );
+
 
         return toResponse(
+
                 longitude,
+
                 latitude,
+
                 sourceType,
+
                 location,
+
                 "地图位置解析成功"
         );
     }
 
-    public MapLocationResponse geocode(
-            String address,
-            String city
-    ) {
-        MapProvider.MapLocation location =
-                mapProvider.geocode(address, city);
 
-        MapProvider.MapPoint point = location.point();
+    /**
+     * 地址转换为坐标。
+     */
+    public MapLocationResponse geocode(
+
+            String address,
+
+            String city
+
+    ) {
+
+        MapProvider.MapLocation location =
+
+                mapProvider
+
+                        .geocode(
+
+                                address,
+
+                                city
+                        );
+
+
+        MapProvider.MapPoint point =
+
+                location.point();
+
 
         return toResponse(
+
                 point.longitude(),
+
                 point.latitude(),
+
                 CoordinateType.BD09,
+
                 location,
+
                 "地址解析成功"
         );
     }
+
+
+    /**
+     * 生成：
+     *
+     * 救护车所在医院
+     * 或清障车所在救援中心
+     *
+     *          ↓
+     *
+     *       事故地点
+     *
+     * 的百度驾车导航链接。
+     *
+     * 起点和终点均使用百度 BD09 坐标。
+     */
+    public String buildDrivingNavigationUrl(
+
+            Double originBaiduLongitude,
+
+            Double originBaiduLatitude,
+
+            String originName,
+
+
+            Double destinationBaiduLongitude,
+
+            Double destinationBaiduLatitude,
+
+            String destinationName
+
+    ) {
+
+        return mapProvider
+
+                .drivingNavigationUrl(
+
+                        originBaiduLongitude,
+
+                        originBaiduLatitude,
+
+                        originName,
+
+
+                        destinationBaiduLongitude,
+
+                        destinationBaiduLatitude,
+
+                        destinationName
+                );
+    }
+
 
     /**
      * 给前端返回浏览器端 JS API 配置。
      */
     public MapClientConfigResponse clientConfig() {
+
         if (browserAk.isBlank()) {
+
             return new MapClientConfigResponse(
+
                     false,
+
                     "",
+
                     "",
-                    "未配置浏览器端AK。百度地图JavaScript API必须使用浏览器端AK。"
+
+                    "未配置浏览器端AK。"
+
+                            + "百度地图JavaScript API"
+
+                            + "必须使用浏览器端AK。"
             );
         }
 
+
         return new MapClientConfigResponse(
+
                 true,
+
                 browserAk,
+
                 "https://api.map.baidu.com/api"
+
                         + "?v=1.0"
+
                         + "&type=webgl"
+
                         + "&ak="
+
                         + browserAk,
+
                 "百度地图JavaScript API配置可用"
         );
     }
+
 
     /**
      * 为事故生成并保存百度坐标与标准地址。
      */
     public MapLocationResponse enrichIncident(
+
             Incident incident
+
     ) {
+
         if (incident == null) {
+
             throw new BadRequestException(
+
                     "incident is required"
             );
         }
 
-        CoordinateType sourceType =
-                incident.getCoordinateType() == null
-                        ? CoordinateType.WGS84
-                        : incident.getCoordinateType();
 
-        if (incident.getBaiduLongitude() != null
-                && incident.getBaiduLatitude() != null) {
+        CoordinateType sourceType =
+
+                incident
+
+                        .getCoordinateType()
+
+                        == null
+
+                        ? CoordinateType.WGS84
+
+                        : incident
+
+                        .getCoordinateType();
+
+
+        if (
+
+                incident
+
+                        .getBaiduLongitude()
+
+                        != null
+
+                        &&
+
+                        incident
+
+                                .getBaiduLatitude()
+
+                                != null
+
+        ) {
+
             return fromStoredIncident(
+
                     incident,
+
                     "已使用事故中缓存的百度地图坐标"
             );
         }
 
+
         MapProvider.MapLocation location;
 
-        if (incident.getLongitude() != null
-                && incident.getLatitude() != null) {
+
+        if (
+
+                incident
+
+                        .getLongitude()
+
+                        != null
+
+                        &&
+
+                        incident
+
+                                .getLatitude()
+
+                                != null
+
+        ) {
 
             MapProvider.MapPoint baiduPoint =
-                    mapProvider.convertToBaidu(
-                            incident.getLongitude(),
-                            incident.getLatitude(),
-                            sourceType
+
+                    mapProvider
+
+                            .convertToBaidu(
+
+                                    incident
+
+                                            .getLongitude(),
+
+                                    incident
+
+                                            .getLatitude(),
+
+                                    sourceType
+                            );
+
+
+            incident
+
+                    .setBaiduLongitude(
+
+                            baiduPoint
+
+                                    .longitude()
                     );
 
-            incident.setBaiduLongitude(
-                    baiduPoint.longitude()
-            );
 
-            incident.setBaiduLatitude(
-                    baiduPoint.latitude()
-            );
+            incident
 
-            incident.setMapFormattedAddress(
-                    firstNonBlank(
-                            incident.getMapFormattedAddress(),
-                            incident.getAddress(),
-                            incident.getLocationName()
-                    )
-            );
+                    .setBaiduLatitude(
+
+                            baiduPoint
+
+                                    .latitude()
+                    );
+
+
+            incident
+
+                    .setMapFormattedAddress(
+
+                            firstNonBlank(
+
+                                    incident
+
+                                            .getMapFormattedAddress(),
+
+                                    incident
+
+                                            .getAddress(),
+
+                                    incident
+
+                                            .getLocationName()
+                            )
+                    );
+
 
             try {
-                location = mapProvider.reverseGeocode(
-                        baiduPoint.longitude(),
-                        baiduPoint.latitude(),
-                        CoordinateType.BD09
-                );
-            } catch (ExternalServiceException ex) {
+
+                location =
+
+                        mapProvider
+
+                                .reverseGeocode(
+
+                                        baiduPoint
+
+                                                .longitude(),
+
+                                        baiduPoint
+
+                                                .latitude(),
+
+                                        CoordinateType.BD09
+                                );
+
+
+            } catch (
+
+                    ExternalServiceException ex
+
+            ) {
+
                 return fromStoredIncident(
+
                         incident,
-                        "百度坐标已生成，但地址解析失败: "
+
+                        "百度坐标已生成，"
+
+                                + "但地址解析失败: "
+
                                 + ex.getMessage()
                 );
             }
 
-        } else if (hasText(incident.getAddress())) {
-            location = mapProvider.geocode(
-                    incident.getAddress(),
-                    null
-            );
 
-            incident.setLongitude(
-                    location.point().longitude()
-            );
+        } else if (
 
-            incident.setLatitude(
-                    location.point().latitude()
-            );
+                hasText(
 
-            incident.setCoordinateType(
-                    CoordinateType.BD09
-            );
+                        incident
 
-            sourceType = CoordinateType.BD09;
+                                .getAddress()
+                )
+
+        ) {
+
+            location =
+
+                    mapProvider
+
+                            .geocode(
+
+                                    incident
+
+                                            .getAddress(),
+
+                                    null
+                            );
+
+
+            incident
+
+                    .setLongitude(
+
+                            location
+
+                                    .point()
+
+                                    .longitude()
+                    );
+
+
+            incident
+
+                    .setLatitude(
+
+                            location
+
+                                    .point()
+
+                                    .latitude()
+                    );
+
+
+            incident
+
+                    .setCoordinateType(
+
+                            CoordinateType.BD09
+                    );
+
+
+            sourceType =
+
+                    CoordinateType.BD09;
+
 
         } else {
+
             return unavailable(
+
                     incident,
-                    "事故没有经纬度，也没有可用于地理编码的地址"
+
+                    "事故没有经纬度，"
+
+                            + "也没有可用于地理编码的地址"
             );
         }
 
-        applyLocation(incident, location);
+
+        applyLocation(
+
+                incident,
+
+                location
+        );
+
 
         return toResponse(
-                incident.getLongitude(),
-                incident.getLatitude(),
+
+                incident
+
+                        .getLongitude(),
+
+                incident
+
+                        .getLatitude(),
+
                 sourceType,
+
                 location,
+
                 "事故地图坐标已生成"
         );
     }
 
+
+    /**
+     * 使用事故表中已经保存的地图坐标。
+     */
     public MapLocationResponse fromStoredIncident(
+
             Incident incident,
+
             String message
+
     ) {
-        if (incident.getBaiduLongitude() == null
-                || incident.getBaiduLatitude() == null) {
+
+        if (
+
+                incident
+
+                        .getBaiduLongitude()
+
+                        == null
+
+                        ||
+
+                        incident
+
+                                .getBaiduLatitude()
+
+                                == null
+
+        ) {
+
             return unavailable(
+
                     incident,
+
                     "事故尚未生成百度地图坐标"
             );
         }
 
+
         String navigationUrl =
-                mapProvider.navigationUrl(
-                        incident.getBaiduLongitude(),
-                        incident.getBaiduLatitude(),
-                        incident.getIncidentNo(),
+
+                mapProvider
+
+                        .navigationUrl(
+
+                                incident
+
+                                        .getBaiduLongitude(),
+
+                                incident
+
+                                        .getBaiduLatitude(),
+
+                                incident
+
+                                        .getIncidentNo(),
+
+                                firstNonBlank(
+
+                                        incident
+
+                                                .getMapFormattedAddress(),
+
+                                        incident
+
+                                                .getLocationName()
+                                )
+                        );
+
+
+        return new MapLocationResponse(
+
+                true,
+
+                message,
+
+
+                incident
+
+                        .getLongitude(),
+
+                incident
+
+                        .getLatitude(),
+
+                incident
+
+                        .getCoordinateType(),
+
+
+                incident
+
+                        .getBaiduLongitude(),
+
+                incident
+
+                        .getBaiduLatitude(),
+
+
+                firstNonBlank(
+
+                        incident
+
+                                .getMapFormattedAddress(),
+
+                        incident
+
+                                .getAddress(),
+
+                        incident
+
+                                .getLocationName()
+                ),
+
+
+                incident
+
+                        .getMapSemanticDescription(),
+
+
+                null,
+
+                null,
+
+                null,
+
+                null,
+
+                null,
+
+                null,
+
+                null,
+
+                null,
+
+
+                navigationUrl
+        );
+    }
+
+
+    /**
+     * 将地图结果写入事故对象。
+     */
+    private void applyLocation(
+
+            Incident incident,
+
+            MapProvider.MapLocation location
+
+    ) {
+
+        incident
+
+                .setBaiduLongitude(
+
+                        location
+
+                                .point()
+
+                                .longitude()
+                );
+
+
+        incident
+
+                .setBaiduLatitude(
+
+                        location
+
+                                .point()
+
+                                .latitude()
+                );
+
+
+        incident
+
+                .setMapFormattedAddress(
+
                         firstNonBlank(
-                                incident.getMapFormattedAddress(),
-                                incident.getLocationName()
+
+                                location
+
+                                        .formattedAddress(),
+
+                                incident
+
+                                        .getAddress(),
+
+                                incident
+
+                                        .getLocationName()
                         )
                 );
 
-        return new MapLocationResponse(
-                true,
-                message,
 
-                incident.getLongitude(),
-                incident.getLatitude(),
-                incident.getCoordinateType(),
+        incident
 
-                incident.getBaiduLongitude(),
-                incident.getBaiduLatitude(),
+                .setMapSemanticDescription(
 
-                firstNonBlank(
-                        incident.getMapFormattedAddress(),
-                        incident.getAddress(),
-                        incident.getLocationName()
-                ),
+                        location
 
-                incident.getMapSemanticDescription(),
+                                .semanticDescription()
+                );
 
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
 
-                navigationUrl
-        );
-    }
+        if (
 
-    private void applyLocation(
-            Incident incident,
-            MapProvider.MapLocation location
-    ) {
-        incident.setBaiduLongitude(
-                location.point().longitude()
-        );
+                !hasText(
 
-        incident.setBaiduLatitude(
-                location.point().latitude()
-        );
+                        incident
 
-        incident.setMapFormattedAddress(
-                firstNonBlank(
-                        location.formattedAddress(),
-                        incident.getAddress(),
-                        incident.getLocationName()
+                                .getAddress()
                 )
-        );
 
-        incident.setMapSemanticDescription(
-                location.semanticDescription()
-        );
+                        &&
 
-        if (!hasText(incident.getAddress())
-                && hasText(location.formattedAddress())) {
-            incident.setAddress(
-                    location.formattedAddress()
-            );
+                        hasText(
+
+                                location
+
+                                        .formattedAddress()
+                        )
+
+        ) {
+
+            incident
+
+                    .setAddress(
+
+                            location
+
+                                    .formattedAddress()
+                    );
         }
     }
 
+
+    /**
+     * 转换地图接口响应。
+     */
     private MapLocationResponse toResponse(
+
             Double sourceLongitude,
+
             Double sourceLatitude,
+
             CoordinateType sourceType,
+
             MapProvider.MapLocation location,
+
             String message
+
     ) {
+
         String navigationUrl =
-                mapProvider.navigationUrl(
-                        location.point().longitude(),
-                        location.point().latitude(),
-                        "事故位置",
-                        location.formattedAddress()
-                );
+
+                mapProvider
+
+                        .navigationUrl(
+
+                                location
+
+                                        .point()
+
+                                        .longitude(),
+
+                                location
+
+                                        .point()
+
+                                        .latitude(),
+
+                                "事故位置",
+
+                                location
+
+                                        .formattedAddress()
+                        );
+
 
         return new MapLocationResponse(
+
                 true,
+
                 message,
 
+
                 sourceLongitude,
+
                 sourceLatitude,
+
                 sourceType,
 
-                location.point().longitude(),
-                location.point().latitude(),
 
-                location.formattedAddress(),
-                location.semanticDescription(),
+                location
 
-                location.province(),
-                location.city(),
-                location.district(),
-                location.town(),
-                location.street(),
-                location.streetNumber(),
-                location.business(),
-                location.adcode(),
+                        .point()
+
+                        .longitude(),
+
+                location
+
+                        .point()
+
+                        .latitude(),
+
+
+                location
+
+                        .formattedAddress(),
+
+                location
+
+                        .semanticDescription(),
+
+
+                location
+
+                        .province(),
+
+                location
+
+                        .city(),
+
+                location
+
+                        .district(),
+
+                location
+
+                        .town(),
+
+                location
+
+                        .street(),
+
+                location
+
+                        .streetNumber(),
+
+                location
+
+                        .business(),
+
+                location
+
+                        .adcode(),
+
 
                 navigationUrl
         );
     }
 
+
+    /**
+     * 返回不可用的地图信息。
+     */
     private MapLocationResponse unavailable(
+
             Incident incident,
+
             String message
+
     ) {
+
         return new MapLocationResponse(
+
                 false,
+
                 message,
 
-                incident.getLongitude(),
-                incident.getLatitude(),
-                incident.getCoordinateType(),
 
-                incident.getBaiduLongitude(),
-                incident.getBaiduLatitude(),
+                incident
+
+                        .getLongitude(),
+
+                incident
+
+                        .getLatitude(),
+
+                incident
+
+                        .getCoordinateType(),
+
+
+                incident
+
+                        .getBaiduLongitude(),
+
+                incident
+
+                        .getBaiduLatitude(),
+
 
                 firstNonBlank(
-                        incident.getMapFormattedAddress(),
-                        incident.getAddress(),
-                        incident.getLocationName()
+
+                        incident
+
+                                .getMapFormattedAddress(),
+
+                        incident
+
+                                .getAddress(),
+
+                        incident
+
+                                .getLocationName()
                 ),
 
-                incident.getMapSemanticDescription(),
+
+                incident
+
+                        .getMapSemanticDescription(),
+
 
                 null,
+
                 null,
+
                 null,
+
                 null,
+
                 null,
+
                 null,
+
                 null,
+
                 null,
+
 
                 ""
         );
     }
 
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
+
+    private boolean hasText(
+
+            String value
+
+    ) {
+
+        return value != null
+
+                && !value.isBlank();
     }
 
-    private String firstNonBlank(String... values) {
+
+    private String firstNonBlank(
+
+            String... values
+
+    ) {
+
         if (values == null) {
+
             return null;
         }
 
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
+
+        for (
+
+                String value
+
+                : values
+
+        ) {
+
+            if (
+
+                    value != null
+
+                            &&
+
+                            !value.isBlank()
+
+            ) {
+
                 return value.trim();
             }
         }
+
 
         return null;
     }

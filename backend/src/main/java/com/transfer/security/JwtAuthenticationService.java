@@ -13,12 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class JwtAuthenticationService {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final RedisTokenSessionService tokenSessionService;
+    private final TokenSessionService tokenSessionService;
     private final UserAccountRepository userAccountRepository;
 
     public JwtAuthenticationService(
             JwtTokenProvider jwtTokenProvider,
-            RedisTokenSessionService tokenSessionService,
+            TokenSessionService tokenSessionService,
             UserAccountRepository userAccountRepository
     ) {
         this.jwtTokenProvider = jwtTokenProvider;

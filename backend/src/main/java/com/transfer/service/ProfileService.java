@@ -12,7 +12,7 @@ import com.transfer.dto.UpdateProfileNameRequest;
 import com.transfer.enums.VerificationPurpose;
 import com.transfer.model.UserAccount;
 import com.transfer.repository.UserAccountRepository;
-import com.transfer.security.RedisTokenSessionService;
+import com.transfer.security.TokenSessionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,7 +24,7 @@ public class ProfileService {
     private final OperationLogService operationLogService;
     private final VerificationCodeService verificationCodeService;
     private final SliderCaptchaService sliderCaptchaService;
-    private final RedisTokenSessionService tokenSessionService;
+    private final TokenSessionService tokenSessionService;
 
     public ProfileService(
             AuthService authService,
@@ -32,7 +32,7 @@ public class ProfileService {
             OperationLogService operationLogService,
             VerificationCodeService verificationCodeService,
             SliderCaptchaService sliderCaptchaService,
-            RedisTokenSessionService tokenSessionService
+            TokenSessionService tokenSessionService
     ) {
         this.authService = authService;
         this.userAccountRepository = userAccountRepository;

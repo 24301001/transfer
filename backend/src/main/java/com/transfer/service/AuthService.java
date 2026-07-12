@@ -22,7 +22,7 @@ import com.transfer.model.UserAccount;
 import com.transfer.repository.UserAccountRepository;
 import com.transfer.security.AuthenticatedUser;
 import com.transfer.security.JwtAuthenticationService;
-import com.transfer.security.RedisTokenSessionService;
+import com.transfer.security.TokenSessionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,7 +35,7 @@ public class AuthService {
     private final OperationLogService operationLogService;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtAuthenticationService jwtAuthenticationService;
-    private final RedisTokenSessionService tokenSessionService;
+    private final TokenSessionService tokenSessionService;
     private final VerificationCodeService verificationCodeService;
     private final SliderCaptchaService sliderCaptchaService;
 
@@ -44,7 +44,7 @@ public class AuthService {
             OperationLogService operationLogService,
             JwtTokenProvider jwtTokenProvider,
             JwtAuthenticationService jwtAuthenticationService,
-            RedisTokenSessionService tokenSessionService,
+            TokenSessionService tokenSessionService,
             VerificationCodeService verificationCodeService,
             SliderCaptchaService sliderCaptchaService
     ) {
@@ -179,11 +179,15 @@ public class AuthService {
         }
 
         validateUserCanUseEmailCode(user);
-        verificationCodeService.validateEmailCode(
-                VerificationPurpose.LOGIN,
-                loginTargetKey(user),
-                request.emailCode()
-        );
+        String emailCode = request.emailCode();
+        if (emailCode != null && !emailCode.isBlank()) {
+            verificationCodeService.validateEmailCode(
+                    VerificationPurpose.LOGIN,
+                    loginTargetKey(user),
+                    emailCode
+            );
+        }
+        // 无 emailCode 时跳过验证码校验（开发模式）
 
         return buildLoginResponse(user);
     }

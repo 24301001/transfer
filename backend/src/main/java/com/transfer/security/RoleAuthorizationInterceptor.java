@@ -20,6 +20,11 @@ public class RoleAuthorizationInterceptor implements HandlerInterceptor {
             HttpServletResponse response,
             Object handler
     ) {
+        // 匿名路径直接放行——不需要认证也不需要角色检查
+        if (PublicApiPaths.matches(request)) {
+            return true;
+        }
+
         if (!(handler instanceof HandlerMethod handlerMethod)) {
             return true;
         }
