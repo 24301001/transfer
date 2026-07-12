@@ -1,6 +1,5 @@
 package com.transfer.controller;
 
-import com.transfer.dto.CaptchaResponse;
 import com.transfer.dto.CurrentUserResponse;
 import com.transfer.dto.EmailCodeRequest;
 import com.transfer.dto.EmailCodeResponse;
@@ -9,7 +8,12 @@ import com.transfer.dto.LoginResponse;
 import com.transfer.dto.MessageResponse;
 import com.transfer.dto.PasswordResetRequest;
 import com.transfer.dto.RegisterRequest;
+import com.transfer.dto.SliderCaptchaChallengeResponse;
+import com.transfer.dto.SliderCaptchaVerifyRequest;
+import com.transfer.dto.SliderCaptchaVerifyResponse;
+import com.transfer.security.ClientFingerprintService;
 import com.transfer.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,19 +29,41 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final ClientFingerprintService clientFingerprintService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(
+            AuthService authService,
+            ClientFingerprintService clientFingerprintService
+    ) {
         this.authService = authService;
+        this.clientFingerprintService = clientFingerprintService;
     }
 
-    @GetMapping("/captcha")
-    public CaptchaResponse captcha() {
-        return authService.captcha();
+    @PostMapping("/slider-captcha/challenge")
+    public SliderCaptchaChallengeResponse createSliderCaptcha(HttpServletRequest request) {
+        return authService.createSliderCaptcha(clientFingerprintService.fingerprint(request));
+    }
+
+    @PostMapping("/slider-captcha/verify")
+    public SliderCaptchaVerifyResponse verifySliderCaptcha(
+            @Valid @RequestBody SliderCaptchaVerifyRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return authService.verifySliderCaptcha(
+                request,
+                clientFingerprintService.fingerprint(servletRequest)
+        );
     }
 
     @PostMapping("/email-code")
-    public EmailCodeResponse sendEmailCode(@Valid @RequestBody EmailCodeRequest request) {
-        return authService.sendEmailCode(request);
+    public EmailCodeResponse sendEmailCode(
+            @Valid @RequestBody EmailCodeRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return authService.sendEmailCode(
+                request,
+                clientFingerprintService.fingerprint(servletRequest)
+        );
     }
 
     @PostMapping("/register")
@@ -60,5 +86,19 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String authorizationHeader
     ) {
         return authService.currentUser(authorizationHeader);
+    }
+
+    @PostMapping("/logout")
+    public MessageResponse logout(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader
+    ) {
+        return authService.logout(authorizationHeader);
+    }
+
+    @PostMapping("/logout-all")
+    public MessageResponse logoutAll(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader
+    ) {
+        return authService.logoutAll(authorizationHeader);
     }
 }

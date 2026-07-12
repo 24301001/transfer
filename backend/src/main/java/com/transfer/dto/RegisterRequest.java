@@ -12,8 +12,6 @@ public record RegisterRequest(
         @NotBlank @Email @Size(max = 128) String email,
         UserRole role,
         @NotBlank @Size(min = 8, max = 128) String password,
-        @NotBlank String emailCode,
-        @NotBlank String captchaId,
-        @NotBlank String captchaCode
+        @NotBlank String emailCode
 ) {
 }

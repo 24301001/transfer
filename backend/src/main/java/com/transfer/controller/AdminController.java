@@ -7,6 +7,9 @@ import com.transfer.dto.UserResponse;
 import com.transfer.dto.RolePermissionResponse;
 import com.transfer.service.OperationLogService;
 import com.transfer.service.UserService;
+import com.transfer.enums.UserRole;
+import com.transfer.security.RequireRoles;
+import com.transfer.security.RequestSecurityAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -28,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
+@RequireRoles(UserRole.ADMIN)
 @RequestMapping("/api/v1/admin")
 public class AdminController {
 
@@ -58,9 +62,11 @@ public class AdminController {
     public UserResponse updateUser(
             @PathVariable Long id,
             @RequestBody UpdateUserRequest request,
-            @RequestParam(value = "operatorUserId", required = false) Long operatorUserId,
             HttpServletRequest servletRequest
     ) {
+        Long operatorUserId = RequestSecurityAttributes
+                .requireAuthenticatedUser(servletRequest)
+                .userId();
         return userService.update(id, request, operatorUserId, clientIp(servletRequest));
     }
 
@@ -68,36 +74,44 @@ public class AdminController {
     public UserResponse updateUserStatus(
             @PathVariable Long id,
             @Valid @RequestBody UpdateUserStatusRequest request,
-            @RequestParam(value = "operatorUserId", required = false) Long operatorUserId,
             HttpServletRequest servletRequest
     ) {
+        Long operatorUserId = RequestSecurityAttributes
+                .requireAuthenticatedUser(servletRequest)
+                .userId();
         return userService.updateStatus(id, request.status(), operatorUserId, clientIp(servletRequest));
     }
 
     @PostMapping("/users/{id}/disable")
     public UserResponse disableUser(
             @PathVariable Long id,
-            @RequestParam(value = "operatorUserId", required = false) Long operatorUserId,
             HttpServletRequest servletRequest
     ) {
+        Long operatorUserId = RequestSecurityAttributes
+                .requireAuthenticatedUser(servletRequest)
+                .userId();
         return userService.disable(id, operatorUserId, clientIp(servletRequest));
     }
 
     @PostMapping("/users/{id}/enable")
     public UserResponse enableUser(
             @PathVariable Long id,
-            @RequestParam(value = "operatorUserId", required = false) Long operatorUserId,
             HttpServletRequest servletRequest
     ) {
+        Long operatorUserId = RequestSecurityAttributes
+                .requireAuthenticatedUser(servletRequest)
+                .userId();
         return userService.enable(id, operatorUserId, clientIp(servletRequest));
     }
 
     @DeleteMapping("/users/{id}")
     public ResponseEntity<Void> deleteUser(
             @PathVariable Long id,
-            @RequestParam(value = "operatorUserId", required = false) Long operatorUserId,
             HttpServletRequest servletRequest
     ) {
+        Long operatorUserId = RequestSecurityAttributes
+                .requireAuthenticatedUser(servletRequest)
+                .userId();
         userService.delete(id, operatorUserId, clientIp(servletRequest));
         return ResponseEntity.noContent().build();
     }

@@ -22,6 +22,9 @@ import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
 import com.transfer.service.CommandCenterService;
 import com.transfer.service.EmergencyVehicleDispatchService;
+import com.transfer.security.RequireRoles;
+import com.transfer.security.RequestSecurityAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -39,6 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
+@RequireRoles({UserRole.ADMIN, UserRole.COMMAND_CENTER})
 @RequestMapping("/api/v1/command-center")
 public class CommandCenterController {
 
@@ -195,9 +199,11 @@ public class CommandCenterController {
             @PathVariable
             Long incidentId,
 
-            @RequestParam(required = false)
-            Long operatorUserId
+            HttpServletRequest servletRequest
     ) {
+        Long operatorUserId = RequestSecurityAttributes
+                .requireAuthenticatedUser(servletRequest)
+                .userId();
         return commandCenterService
                 .regeneratePredictionExplanation(
                         incidentId,

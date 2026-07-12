@@ -3,9 +3,7 @@ package com.transfer.service;
 import com.transfer.common.BadRequestException;
 import com.transfer.common.JwtTokenProvider;
 import com.transfer.common.PasswordUtils;
-import com.transfer.common.ResourceNotFoundException;
 import com.transfer.common.UnauthorizedException;
-import com.transfer.dto.CaptchaResponse;
 import com.transfer.dto.CurrentUserResponse;
 import com.transfer.dto.EmailCodeRequest;
 import com.transfer.dto.EmailCodeResponse;
@@ -14,11 +12,17 @@ import com.transfer.dto.LoginResponse;
 import com.transfer.dto.MessageResponse;
 import com.transfer.dto.PasswordResetRequest;
 import com.transfer.dto.RegisterRequest;
+import com.transfer.dto.SliderCaptchaChallengeResponse;
+import com.transfer.dto.SliderCaptchaVerifyRequest;
+import com.transfer.dto.SliderCaptchaVerifyResponse;
 import com.transfer.enums.UserRole;
 import com.transfer.enums.UserStatus;
 import com.transfer.enums.VerificationPurpose;
 import com.transfer.model.UserAccount;
 import com.transfer.repository.UserAccountRepository;
+import com.transfer.security.AuthenticatedUser;
+import com.transfer.security.JwtAuthenticationService;
+import com.transfer.security.RedisTokenSessionService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,34 +34,56 @@ public class AuthService {
     private final UserAccountRepository userAccountRepository;
     private final OperationLogService operationLogService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtAuthenticationService jwtAuthenticationService;
+    private final RedisTokenSessionService tokenSessionService;
     private final VerificationCodeService verificationCodeService;
+    private final SliderCaptchaService sliderCaptchaService;
 
     public AuthService(
             UserAccountRepository userAccountRepository,
             OperationLogService operationLogService,
             JwtTokenProvider jwtTokenProvider,
-            VerificationCodeService verificationCodeService
+            JwtAuthenticationService jwtAuthenticationService,
+            RedisTokenSessionService tokenSessionService,
+            VerificationCodeService verificationCodeService,
+            SliderCaptchaService sliderCaptchaService
     ) {
         this.userAccountRepository = userAccountRepository;
         this.operationLogService = operationLogService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtAuthenticationService = jwtAuthenticationService;
+        this.tokenSessionService = tokenSessionService;
         this.verificationCodeService = verificationCodeService;
+        this.sliderCaptchaService = sliderCaptchaService;
     }
 
-    public CaptchaResponse captcha() {
-        return verificationCodeService.createCaptcha();
+    public SliderCaptchaChallengeResponse createSliderCaptcha(String fingerprintHash) {
+        return sliderCaptchaService.createChallenge(fingerprintHash);
+    }
+
+    public SliderCaptchaVerifyResponse verifySliderCaptcha(
+            SliderCaptchaVerifyRequest request,
+            String fingerprintHash
+    ) {
+        return sliderCaptchaService.verify(
+                request.captchaId(),
+                request.sliderX(),
+                fingerprintHash
+        );
     }
 
     @Transactional(readOnly = true)
-    public EmailCodeResponse sendEmailCode(EmailCodeRequest request) {
-        verificationCodeService.validateCaptcha(request.captchaId(), request.captchaCode());
-
+    public EmailCodeResponse sendEmailCode(
+            EmailCodeRequest request,
+            String fingerprintHash
+    ) {
         VerificationPurpose purpose = request.purpose();
         if (purpose == VerificationPurpose.REGISTER) {
             String email = normalizeRequiredEmail(request.email());
             if (userAccountRepository.existsByEmail(email)) {
                 throw new BadRequestException("Email already exists: " + email);
             }
+            sliderCaptchaService.consumeVerificationToken(request.sliderToken(), fingerprintHash);
             return verificationCodeService.sendEmailCode(
                     purpose,
                     registerTargetKey(email),
@@ -68,6 +94,7 @@ public class AuthService {
         if (purpose == VerificationPurpose.LOGIN) {
             UserAccount user = findByUsernameForAuth(request.username());
             validateUserCanUseEmailCode(user);
+            sliderCaptchaService.consumeVerificationToken(request.sliderToken(), fingerprintHash);
             return verificationCodeService.sendEmailCode(
                     purpose,
                     loginTargetKey(user),
@@ -82,6 +109,7 @@ public class AuthService {
                 throw new BadRequestException("用户名与邮箱不匹配");
             }
             validateUserCanUseEmailCode(user);
+            sliderCaptchaService.consumeVerificationToken(request.sliderToken(), fingerprintHash);
             return verificationCodeService.sendEmailCode(
                     purpose,
                     resetPasswordTargetKey(user),
@@ -94,8 +122,6 @@ public class AuthService {
 
     @Transactional
     public LoginResponse register(RegisterRequest request) {
-        verificationCodeService.validateCaptcha(request.captchaId(), request.captchaCode());
-
         String username = normalizeRequired(request.username(), "username");
         String email = normalizeRequiredEmail(request.email());
 
@@ -148,13 +174,11 @@ public class AuthService {
         if (user.getStatus() != UserStatus.ENABLED) {
             throw new UnauthorizedException("User account is disabled");
         }
-
         if (!PasswordUtils.matches(request.password(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid username or password");
         }
 
         validateUserCanUseEmailCode(user);
-        verificationCodeService.validateCaptcha(request.captchaId(), request.captchaCode());
         verificationCodeService.validateEmailCode(
                 VerificationPurpose.LOGIN,
                 loginTargetKey(user),
@@ -166,8 +190,6 @@ public class AuthService {
 
     @Transactional
     public MessageResponse resetPassword(PasswordResetRequest request) {
-        verificationCodeService.validateCaptcha(request.captchaId(), request.captchaCode());
-
         UserAccount user = findByUsernameForAuth(request.username());
         String email = normalizeRequiredEmail(request.email());
         if (!email.equalsIgnoreCase(nullToEmpty(user.getEmail()))) {
@@ -185,6 +207,7 @@ public class AuthService {
 
         user.setPasswordHash(PasswordUtils.hash(request.newPassword()));
         userAccountRepository.save(user);
+        tokenSessionService.revokeAll(user.getId());
         operationLogService.record(
                 user.getId(),
                 "RESET_PASSWORD",
@@ -204,19 +227,22 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public UserAccount loadCurrentUser(String authorizationHeader) {
-        String token = jwtTokenProvider.resolveToken(authorizationHeader)
-                .orElseThrow(() -> new UnauthorizedException("Missing Authorization bearer token"));
+        String token = resolveBearerToken(authorizationHeader);
+        return jwtAuthenticationService.authenticate(token).user();
+    }
 
-        JwtTokenProvider.JwtClaims claims = jwtTokenProvider.parseAndValidate(token);
+    public MessageResponse logout(String authorizationHeader) {
+        String token = resolveBearerToken(authorizationHeader);
+        AuthenticatedUser authenticated = jwtAuthenticationService.authenticate(token);
+        tokenSessionService.revoke(authenticated.tokenId());
+        return new MessageResponse("已退出登录");
+    }
 
-        UserAccount user = userAccountRepository.findById(claims.userId())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + claims.userId()));
-
-        if (user.getStatus() != UserStatus.ENABLED) {
-            throw new UnauthorizedException("User account is disabled");
-        }
-
-        return user;
+    public MessageResponse logoutAll(String authorizationHeader) {
+        String token = resolveBearerToken(authorizationHeader);
+        AuthenticatedUser authenticated = jwtAuthenticationService.authenticate(token);
+        tokenSessionService.revokeAll(authenticated.userId());
+        return new MessageResponse("已退出该账号的全部登录会话");
     }
 
     public String loginTargetKey(UserAccount user) {
@@ -245,12 +271,19 @@ public class AuthService {
     }
 
     private LoginResponse buildLoginResponse(UserAccount user) {
+        JwtTokenProvider.IssuedToken issuedToken = jwtTokenProvider.issueToken(user);
+        tokenSessionService.store(issuedToken.claims());
         return new LoginResponse(
-                jwtTokenProvider.createToken(user),
+                issuedToken.token(),
                 "Bearer",
                 jwtTokenProvider.getExpirationSeconds(),
                 CurrentUserResponse.from(user)
         );
+    }
+
+    private String resolveBearerToken(String authorizationHeader) {
+        return jwtTokenProvider.resolveToken(authorizationHeader)
+                .orElseThrow(() -> new UnauthorizedException("Missing Authorization bearer token"));
     }
 
     private UserAccount findByUsernameForAuth(String usernameValue) {

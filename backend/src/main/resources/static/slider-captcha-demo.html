@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>滑块验证码联调示例</title>
+  <link rel="stylesheet" href="/css/slider-captcha.css">
+  <style>
+    body { margin: 0; background: #f3f6fb; font-family: Arial, "Microsoft YaHei", sans-serif; color: #172033; }
+    main { max-width: 520px; margin: 56px auto; padding: 28px; background: #fff; border-radius: 16px; box-shadow: 0 16px 45px rgba(15,23,42,.1); }
+    label { display: block; margin: 14px 0 6px; font-size: 14px; }
+    input, select, button { box-sizing: border-box; width: 100%; height: 42px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 12px; }
+    button { margin-top: 18px; border: 0; background: #2563eb; color: #fff; cursor: pointer; }
+    pre { margin-top: 18px; padding: 14px; overflow: auto; border-radius: 8px; background: #0f172a; color: #dbeafe; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<main>
+  <h2>发送邮箱验证码</h2>
+  <label>用途</label>
+  <select id="purpose">
+    <option value="REGISTER">注册</option>
+    <option value="LOGIN">登录</option>
+    <option value="RESET_PASSWORD">重置密码</option>
+  </select>
+  <label>用户名（登录/重置密码时填写）</label>
+  <input id="username" placeholder="username">
+  <label>邮箱（注册/重置密码时填写）</label>
+  <input id="email" type="email" placeholder="name@example.com">
+  <button id="sendButton">发送邮箱验证码</button>
+  <pre id="result">等待操作</pre>
+</main>
+<script src="/js/slider-captcha.js"></script>
+<script>
+  const captchaModal = new SliderCaptchaModal({ baseUrl: "" });
+  const result = document.getElementById("result");
+
+  document.getElementById("sendButton").addEventListener("click", async () => {
+    try {
+      const sliderToken = await captchaModal.open();
+      const response = await fetch("/api/v1/auth/email-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          purpose: document.getElementById("purpose").value,
+          username: document.getElementById("username").value || null,
+          email: document.getElementById("email").value || null,
+          sliderToken
+        })
+      });
+      const data = await response.json();
+      result.textContent = JSON.stringify(data, null, 2);
+    } catch (error) {
+      result.textContent = error.message;
+    }
+  });
+</script>
+</body>
+</html>
