@@ -75,6 +75,22 @@ public class Incident extends AuditableEntity {
 
     private Integer peopleFlow;
 
+    /**
+     * 涉及人数（现场人员填写）。
+     */
+    private Integer peopleInvolved;
+
+    /**
+     * 受伤人数（现场人员填写，AI不检测行人受伤）。
+     */
+    private Integer injuredCount;
+
+    /**
+     * 伤情预估描述（现场人员填写）。
+     */
+    @Column(length = 500)
+    private String injuryEstimate;
+
     @Column(length = 40)
     private String weather;
 
@@ -458,5 +474,29 @@ public class Incident extends AuditableEntity {
 
     public void setReportUserId(Long reportUserId) {
         this.reportUserId = reportUserId;
+    }
+
+    public Integer getPeopleInvolved() {
+        return peopleInvolved;
+    }
+
+    public void setPeopleInvolved(Integer peopleInvolved) {
+        this.peopleInvolved = peopleInvolved;
+    }
+
+    public Integer getInjuredCount() {
+        return injuredCount;
+    }
+
+    public void setInjuredCount(Integer injuredCount) {
+        this.injuredCount = injuredCount;
+    }
+
+    public String getInjuryEstimate() {
+        return injuryEstimate;
+    }
+
+    public void setInjuryEstimate(String injuryEstimate) {
+        this.injuryEstimate = injuryEstimate;
     }
 }

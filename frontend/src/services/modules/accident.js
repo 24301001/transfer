@@ -271,8 +271,17 @@ export async function addAccidentWithAttachments(data) {
 
 /** 转换后端 PublicIncidentSubmitResponse → 前端扁平结构 */
 function transformPublicReportResponse(data) {
+  // 从附件中提取 AI 检测事故类型
+  const attachments = data.incidentDetail?.attachments || [];
+  const aiDetected = attachments
+    .filter(a => a.aiDetectedTypes)
+    .flatMap(a => (a.aiDetectedTypes || '').split(','))
+    .filter(t => t.trim())
+    .join(', ');
+
   return {
     incidentDetail: data.incidentDetail ? transformIncidentDetail(data.incidentDetail) : null,
+    aiDetectedType: aiDetected || null,
     immediateAdvice: data.immediateAdvice ? {
       calmingMessage: data.immediateAdvice.calmingMessage || '',
       immediateAdvice: data.immediateAdvice.immediateAdvice || '',
@@ -311,6 +320,9 @@ export async function publicReport(data) {
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    peopleInvolved: data.peopleInvolved || null,
+    injuredCount: data.injuredCount || null,
+    injuryEstimate: data.injuryEstimate || '',
   }
   const res = await request.post('/v1/incidents/public-report', body)
   return {
@@ -340,6 +352,9 @@ export async function publicReportWithAttachments(data) {
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    peopleInvolved: data.peopleInvolved || null,
+    injuredCount: data.injuredCount || null,
+    injuryEstimate: data.injuryEstimate || '',
   }
   formData.append('incident', new Blob([JSON.stringify(body)], { type: 'application/json' }))
 

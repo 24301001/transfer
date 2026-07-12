@@ -3,6 +3,7 @@ package com.transfer.service;
 import com.transfer.adapter.DeepSeekClient;
 import com.transfer.adapter.PredictionClient;
 import com.transfer.adapter.PredictionOutcome;
+import com.transfer.adapter.YoloDetectClient;
 import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
 import com.transfer.common.ResourceNotFoundException;
@@ -70,8 +71,10 @@ public class IncidentService {
     private final OperationLogService operationLogService;
     private final RealtimeService realtimeService;
     private final MapService mapService;
+    private final YoloDetectClient yoloDetectClient;
     private final Path uploadDir;
     private final boolean autoSubmitPredictionOnPublicReport;
+    private final float yoloDefaultConf;
 
     public IncidentService(
             IncidentRepository incidentRepository,
@@ -86,9 +89,11 @@ public class IncidentService {
             OperationLogService operationLogService,
             RealtimeService realtimeService,
             MapService mapService,
+            YoloDetectClient yoloDetectClient,
             @Value("${app.upload-dir:uploads}") String uploadDir,
             @Value("${app.incident.auto-submit-prediction-on-public-report:true}")
-            boolean autoSubmitPredictionOnPublicReport
+            boolean autoSubmitPredictionOnPublicReport,
+            @Value("${app.yolo.default-conf:0.3}") float yoloDefaultConf
     ) {
         this.incidentRepository = incidentRepository;
         this.attachmentRepository = attachmentRepository;
@@ -102,8 +107,10 @@ public class IncidentService {
         this.operationLogService = operationLogService;
         this.realtimeService = realtimeService;
         this.mapService = mapService;
+        this.yoloDetectClient = yoloDetectClient;
         this.autoSubmitPredictionOnPublicReport =
                 autoSubmitPredictionOnPublicReport;
+        this.yoloDefaultConf = yoloDefaultConf;
 
         this.uploadDir = Path.of(uploadDir)
                 .toAbsolutePath()
@@ -181,6 +188,18 @@ public class IncidentService {
 
         incident.setRoadStatus(
                 trimToNull(request.roadStatus())
+        );
+
+        incident.setPeopleInvolved(
+                request.peopleInvolved()
+        );
+
+        incident.setInjuredCount(
+                request.injuredCount()
+        );
+
+        incident.setInjuryEstimate(
+                trimToNull(request.injuryEstimate())
         );
 
         incident.setReportUserId(
@@ -307,6 +326,11 @@ public class IncidentService {
                     "VIDEO"
             );
         }
+
+        // ---- 调用 YOLOv5 AI 检测并自动填充事故类型 ----
+        List<IncidentAttachment> allAttachments =
+                attachmentRepository.findByIncidentId(incident.getId());
+        runYoloDetection(incident, allAttachments, photos, videos, video);
 
         CitizenImmediateAdviceResponse immediateAdvice =
                 citizenAiService.generateImmediateAdvice(incident);
@@ -544,6 +568,71 @@ public class IncidentService {
                     "Failed to save attachment: "
                             + ex.getMessage()
             );
+        }
+    }
+
+    /**
+     * 对上传的照片/视频调用 YOLOv5 进行事故检测，
+     * 自动提取事故类型（排除 "car"），保存到附件和事故记录。
+     */
+    private void runYoloDetection(
+            Incident incident,
+            List<IncidentAttachment> attachments,
+            List<MultipartFile> photos,
+            List<MultipartFile> videos,
+            MultipartFile singleVideo
+    ) {
+        java.util.Set<String> allAccidentTypes = new java.util.LinkedHashSet<>();
+        List<IncidentAttachment> updatedAttachments = new ArrayList<>();
+
+        for (IncidentAttachment att : attachments) {
+            try {
+                if ("PHOTO".equals(att.getAttachmentType())) {
+                    YoloDetectClient.YoloImageResult result = yoloDetectClient.detectImageByPath(
+                            uploadDir.resolve(att.getFileName()).toFile(), yoloDefaultConf);
+                    if (result != null && result.success()) {
+                        att.setAiDetectedTypes(String.join(",", result.accidentTypes()));
+                        att.setAiDetectionJson(result.rawJson());
+                        att.setRecognitionStatus("COMPLETED");
+                        allAccidentTypes.addAll(result.accidentTypes());
+                    } else {
+                        att.setRecognitionStatus(result != null ? "FAILED" : "PENDING");
+                    }
+                    updatedAttachments.add(att);
+
+                } else if ("VIDEO".equals(att.getAttachmentType())) {
+                    YoloDetectClient.YoloVideoResult result = yoloDetectClient.detectVideoByPath(
+                            uploadDir.resolve(att.getFileName()).toFile(), yoloDefaultConf);
+                    if (result != null && result.success()) {
+                        att.setAiDetectedTypes(String.join(",", result.accidentTypes()));
+                        att.setAiDetectionJson(result.rawJson());
+                        att.setRecognitionStatus("COMPLETED");
+                        allAccidentTypes.addAll(result.accidentTypes());
+                    } else {
+                        att.setRecognitionStatus(result != null ? "FAILED" : "PENDING");
+                    }
+                    updatedAttachments.add(att);
+                }
+            } catch (Exception e) {
+                log.warn("附件 {} YOLOv5 检测失败: {}", att.getId(), e.getMessage());
+                att.setRecognitionStatus("FAILED");
+                updatedAttachments.add(att);
+            }
+        }
+
+        // 批量保存更新后的附件
+        if (!updatedAttachments.isEmpty()) {
+            attachmentRepository.saveAll(updatedAttachments);
+        }
+
+        // 自动填充事故类型（AI检测结果 → initialAccidentType）
+        if (!allAccidentTypes.isEmpty()) {
+            String aiType = String.join(",", allAccidentTypes);
+            if (incident.getInitialAccidentType() == null || incident.getInitialAccidentType().isBlank()) {
+                incident.setInitialAccidentType(aiType);
+            }
+            incidentRepository.save(incident);
+            log.info("事故 {} YOLOv5 AI检测类型: {}", incident.getIncidentNo(), aiType);
         }
     }
 

@@ -36,6 +36,24 @@ public class IncidentAttachment extends AuditableEntity {
     @Column(nullable = false, length = 32)
     private String recognitionStatus = "PENDING";
 
+    /**
+     * AI检测到的事故类型（逗号分隔，如 "car crash,fire"），排除 "car"。
+     */
+    @Column(length = 200)
+    private String aiDetectedTypes;
+
+    /**
+     * YOLOv5 完整检测结果 JSON（含 bbox、confidence 等）。
+     */
+    @Column(columnDefinition = "TEXT")
+    private String aiDetectionJson;
+
+    /**
+     * 指挥中心是否已查看。
+     */
+    @Column(nullable = false)
+    private Boolean reviewed = false;
+
     public Long getIncidentId() {
         return incidentId;
     }
@@ -106,5 +124,29 @@ public class IncidentAttachment extends AuditableEntity {
 
     public void setRecognitionStatus(String recognitionStatus) {
         this.recognitionStatus = recognitionStatus;
+    }
+
+    public String getAiDetectedTypes() {
+        return aiDetectedTypes;
+    }
+
+    public void setAiDetectedTypes(String aiDetectedTypes) {
+        this.aiDetectedTypes = aiDetectedTypes;
+    }
+
+    public String getAiDetectionJson() {
+        return aiDetectionJson;
+    }
+
+    public void setAiDetectionJson(String aiDetectionJson) {
+        this.aiDetectionJson = aiDetectionJson;
+    }
+
+    public Boolean getReviewed() {
+        return reviewed;
+    }
+
+    public void setReviewed(Boolean reviewed) {
+        this.reviewed = reviewed;
     }
 }

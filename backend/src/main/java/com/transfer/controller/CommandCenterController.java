@@ -20,6 +20,7 @@ import com.transfer.enums.VehicleType;
 import com.transfer.model.DispatchTask;
 import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
+import com.transfer.model.IncidentAttachment;
 import com.transfer.service.CommandCenterService;
 import com.transfer.service.EmergencyVehicleDispatchService;
 import com.transfer.security.RequireRoles;
@@ -380,5 +381,28 @@ public class CommandCenterController {
                         vehicleId,
                         request
                 );
+    }
+
+    /**
+     * 获取事故的 AI 检测附件列表（供指挥中心查看带检测框的图片/视频）。
+     * 返回所有已完成 AI 识别的附件及其检测结果。
+     */
+    @GetMapping("/incidents/{incidentId}/ai-attachments")
+    public List<IncidentAttachment> findAiAttachments(
+            @PathVariable Long incidentId
+    ) {
+        return commandCenterService.findAiDetectedAttachments(incidentId);
+    }
+
+    /**
+     * 指挥中心标记附件为已查看。
+     */
+    @PutMapping("/incidents/{incidentId}/ai-attachments/{attachmentId}/review")
+    public ResponseEntity<Void> reviewAttachment(
+            @PathVariable Long incidentId,
+            @PathVariable Long attachmentId
+    ) {
+        commandCenterService.markAttachmentReviewed(incidentId, attachmentId);
+        return ResponseEntity.ok().build();
     }
 }

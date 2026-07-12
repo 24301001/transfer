@@ -58,6 +58,15 @@ public record CreateIncidentRequest(
         @Size(max = 40)
         String roadStatus,
 
+        @Min(0)
+        Integer peopleInvolved,
+
+        @Min(0)
+        Integer injuredCount,
+
+        @Size(max = 500)
+        String injuryEstimate,
+
         Long reportUserId
 ) {
 }

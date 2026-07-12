@@ -1,6 +1,8 @@
 package com.transfer.service;
 
+import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
+import com.transfer.common.ResourceNotFoundException;
 import com.transfer.dto.CommandDispatchRequest;
 import com.transfer.dto.CommandIncidentDetailResponse;
 import com.transfer.dto.CommandIncidentSummaryResponse;
@@ -16,6 +18,7 @@ import com.transfer.enums.UserRole;
 import com.transfer.enums.UserStatus;
 import com.transfer.model.DispatchTask;
 import com.transfer.model.Incident;
+import com.transfer.model.IncidentAttachment;
 import com.transfer.repository.DispatchTaskRepository;
 import com.transfer.repository.IncidentAttachmentRepository;
 import com.transfer.repository.IncidentRepository;
@@ -38,6 +41,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class CommandCenterService {
@@ -681,5 +685,28 @@ public class CommandCenterService {
 
         return null;
     }
-}
 
+    /**
+     * 获取事故的 AI 检测附件列表（供指挥中心查看带检测框的图片/视频）。
+     */
+    public List<IncidentAttachment> findAiDetectedAttachments(Long incidentId) {
+        List<IncidentAttachment> attachments = attachmentRepository.findByIncidentId(incidentId);
+        return attachments.stream()
+                .filter(a -> "COMPLETED".equals(a.getRecognitionStatus())
+                        && a.getAiDetectedTypes() != null && !a.getAiDetectedTypes().isBlank())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 指挥中心标记附件为已查看。
+     */
+    public void markAttachmentReviewed(Long incidentId, Long attachmentId) {
+        IncidentAttachment att = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Attachment not found: " + attachmentId));
+        if (!att.getIncidentId().equals(incidentId)) {
+            throw new BadRequestException("Attachment does not belong to this incident");
+        }
+        att.setReviewed(true);
+        attachmentRepository.save(att);
+    }
+}

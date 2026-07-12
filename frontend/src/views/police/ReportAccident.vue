@@ -120,7 +120,7 @@
           <div class="type-picker">
             <el-select
               v-model="form.accidentType"
-              placeholder="选择事故类型"
+              placeholder="选择事故类型（AI将自动识别）"
               clearable
               style="width:320px"
             >
@@ -131,7 +131,28 @@
                 :value="t"
               />
             </el-select>
+            <el-tag v-if="aiDetectedType" type="success" effect="dark" style="margin-left:8px;">
+              AI识别: {{ aiDetectedType }}
+            </el-tag>
           </div>
+        </el-form-item>
+
+        <!-- 行人受伤（现场人员手动填写，AI不检测） -->
+        <el-form-item label="涉及人数">
+          <el-input-number v-model="form.peopleInvolved" :min="0" placeholder="0" style="width:160px" />
+        </el-form-item>
+        <el-form-item label="受伤人数">
+          <el-input-number v-model="form.injuredCount" :min="0" placeholder="0" style="width:160px" />
+        </el-form-item>
+        <el-form-item label="伤情描述">
+          <el-input
+            v-model="form.injuryEstimate"
+            type="textarea"
+            :rows="2"
+            maxlength="500"
+            show-word-limit
+            placeholder="请描述受伤情况（如有）"
+          />
         </el-form-item>
 
         <!-- 事故描述 -->
@@ -385,6 +406,7 @@ const resultVisible = ref(false)
 const adviceVisible = ref(false)
 const result = ref(null)
 const lastSubmission = ref(null)
+const aiDetectedType = ref('') // AI 识别到的事故类型
 
 /** 公共上报返回的元数据（即时提示、预计到达、预测提交状态） */
 const publicReportMeta = ref(null)
@@ -402,6 +424,9 @@ const form = reactive({
   locationLng: null,  // WGS84 经度
   accidentType: '',
   description: '',
+  peopleInvolved: null,
+  injuredCount: null,
+  injuryEstimate: '',
 })
 
 const rules = {
@@ -708,6 +733,9 @@ async function handleSubmit() {
       },
       description: form.description,
       accidentType: form.accidentType || '',
+      peopleInvolved: form.peopleInvolved || 0,
+      injuredCount: form.injuredCount || 0,
+      injuryEstimate: form.injuryEstimate || '',
       reporter: userStore.nickname,
       reporterId: userStore.userInfo?.id || 0,
       coordinateType: 'WGS84',
@@ -762,6 +790,10 @@ function handleReset() {
   form.locationLng = null
   form.accidentType = ''
   form.description = ''
+  form.peopleInvolved = null
+  form.injuredCount = null
+  form.injuryEstimate = ''
+  aiDetectedType.value = ''
   mapCenter.value = null
   result.value = null
   resultVisible.value = false
