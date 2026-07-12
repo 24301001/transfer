@@ -85,6 +85,19 @@ const routes = [
         component: () => import('@/views/admin/OperationLog.vue'),
         meta: { title: '操作日志', roles: [ROLES.ADMIN.key] },
       },
+      {
+        path: 'admin/health',
+        name: 'AdminHealth',
+        component: () => import('@/views/admin/SystemHealth.vue'),
+        meta: { title: '系统健康', roles: [ROLES.ADMIN.key] },
+      },
+      // ====== 个人中心（所有角色） ======
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/Profile.vue'),
+        meta: { title: '个人中心', roles: [ROLES.POLICE.key, ROLES.COMMAND.key, ROLES.RESCUE.key, ROLES.ADMIN.key] },
+      },
     ],
   },
 ]

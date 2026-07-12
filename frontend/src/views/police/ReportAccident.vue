@@ -75,29 +75,9 @@
         <!-- 事故地点 -->
         <el-form-item label="事故地点" prop="locationStr">
           <div class="location-picker">
-            <el-select
-              v-model="form.locationPreset"
-              placeholder="选择预设路段"
-              clearable
-              filterable
-              class="location-select"
-              @change="onPresetChange"
-            >
-              <el-option
-                v-for="loc in PRESET_LOCATIONS"
-                :key="loc.id"
-                :label="loc.name"
-                :value="loc.id"
-              >
-                <div class="loc-option">
-                  <span class="loc-name">{{ loc.name }}</span>
-                  <span class="loc-area">{{ loc.area }}</span>
-                </div>
-              </el-option>
-            </el-select>
             <el-input
               v-model="form.customLocation"
-              placeholder="或手动输入详细位置"
+              placeholder="手动输入详细位置，或使用自动定位"
               class="location-input"
               @input="onCustomLocationInput"
             />
@@ -384,7 +364,7 @@ import { useAccidentStore } from '@/stores/accident'
 import { useAiChatContext } from '@/composables/useAiChatContext'
 import { publicReport, publicReportWithAttachments } from '@/services/modules/accident'
 import { reverseGeocode } from '@/services/modules/map'
-import { PRESET_LOCATIONS, getPresetCoords, getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
+import { getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import {
   Upload, Aim, LocationFilled, Loading, View, Collection,
@@ -415,7 +395,6 @@ const submitSucceeded = ref(false)
 const form = reactive({
   images: [],
   video: null,
-  locationPreset: null,
   customLocation: '',
   locationStr: '',
   locationName: '',   // 地点名称
@@ -578,34 +557,9 @@ const mapMarkers = computed(() => {
   }]
 })
 
-// ====== 预设地点选择 ======
-function onPresetChange(val) {
-  if (val) {
-    const loc = PRESET_LOCATIONS.find((l) => l.id === val)
-    const coords = getPresetCoords(val)
-    if (loc) {
-      form.locationStr = loc.name
-      form.locationName = loc.name
-      form.customLocation = loc.name
-      if (coords) {
-        form.locationLat = coords.lat
-        form.locationLng = coords.lng
-        // 设置地图中心（需转换为 BD09 显示）
-        setMapCenterToWgs84(coords.lng, coords.lat)
-      } else {
-        form.locationLat = null
-        form.locationLng = null
-        mapCenter.value = null
-      }
-    }
-  } else {
-    clearLocation()
-  }
-}
-
 /** 手动输入地址 */
 function onCustomLocationInput(val) {
-  if (val && !form.locationPreset) {
+  if (val) {
     form.locationStr = val
     form.locationName = val
     // 不自动清除坐标，用户可能已在地图上选了点
@@ -623,7 +577,6 @@ function onMapLocationSelect(data) {
   form.locationLng = wgs84.lng
   form.locationName = data.address || data.formattedAddress || form.customLocation || '地图选点'
   form.locationStr = data.formattedAddress || data.address || data.semanticDescription || `${wgs84.lat.toFixed(4)}, ${wgs84.lng.toFixed(4)}`
-  form.locationPreset = null
 
   // 地图中心自动跟随选择点（MapCard 已 panTo）
 }
@@ -702,7 +655,6 @@ async function handleAutoLocate() {
     form.locationName = addressText
     form.locationStr = addressText
     form.customLocation = addressText
-    form.locationPreset = null
 
     // 设置地图中心（WGS84 → MapCard 需要 BD09）
     setMapCenterToWgs84(lng, lat)
@@ -732,7 +684,6 @@ function clearLocation() {
   form.locationName = ''
   form.locationLat = null
   form.locationLng = null
-  form.locationPreset = null
   mapCenter.value = null
 }
 
@@ -804,7 +755,6 @@ async function handleSubmit() {
 function handleReset() {
   removeVideo()
   form.images = []
-  form.locationPreset = null
   form.customLocation = ''
   form.locationStr = ''
   form.locationName = ''
@@ -845,10 +795,6 @@ function openAdviceDialog() {
   flex-wrap: wrap;
   width: 100%;
 
-  .location-select {
-    width: 320px;
-  }
-
   .location-input {
     flex: 1;
     min-width: 180px;
@@ -858,13 +804,6 @@ function openAdviceDialog() {
     border-radius: 10px;
     height: 36px;
   }
-}
-
-.loc-option {
-  display: flex;
-  justify-content: space-between;
-  .loc-name { font-size: 13px; font-weight: 500; }
-  .loc-area { font-size: 12px; color: $text-light; }
 }
 
 .location-result {
