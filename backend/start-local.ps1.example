@@ -1,0 +1,15 @@
+$ErrorActionPreference = "Stop"
+
+$env:QQ_MAIL_USERNAME = "your@qq.com"
+$env:QQ_MAIL_AUTH_CODE = "replace-with-qq-smtp-auth-code"
+
+$bytes = New-Object byte[] 48
+[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+$env:APP_AUTH_JWT_SECRET = [Convert]::ToBase64String($bytes)
+
+$env:REDIS_HOST = "127.0.0.1"
+$env:REDIS_PORT = "6379"
+$env:REDIS_DATABASE = "0"
+$env:REDIS_PASSWORD = "change-this-redis-password"
+
+mvn clean spring-boot:run
