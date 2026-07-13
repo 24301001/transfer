@@ -42,7 +42,17 @@ request.interceptors.response.use(
     return { code: 200, data: res }
   },
   (error) => {
-    // HTTP 错误处理
+    // 401 → token 过期/无效，清除登录状态并跳转登录页
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('userInfo')
+      // 避免重复跳转（登录页本身不跳）
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+      return Promise.reject(error)
+    }
+    // 其他 HTTP 错误
     const msg = error.response?.data?.message || error.message || '网络错误'
     ElMessage.error(msg)
     return Promise.reject(error)

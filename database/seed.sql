@@ -1,49 +1,305 @@
 -- ============================================================
--- 交通事故风险智能识别与调度系统 - 种子数据
--- ============================================================
--- 演示密码均为 123456
--- SHA-256("123456") = 8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92
--- SHA-256("admin123") = 240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9
+-- seed.sql
+-- 道路交通事故风险预估与后果预测平台
+-- 必须在 init.sql 之后执行
+-- 数据严格对应当前 DemoDataInitializer
+-- 4 个演示账号默认密码均为：123456
 -- ============================================================
 
-USE traffic_risk_db;
+SET NAMES utf8mb4;
 
+USE `traffic_risk_db`;
 
--- ============================================================
--- 1. 系统用户 (6人)
--- 用户角色对齐 JPA: FIELD_OFFICER / COMMAND_CENTER / RESCUE_WORKER / ADMIN
--- ============================================================
-INSERT INTO app_users (full_name, username, phone, email, role, status, rescue_center_id, password_hash) VALUES
-('张警官', 'police1',  '13800000001', 'police1@example.com',  'FIELD_OFFICER',  'ENABLED', NULL, 'sha256:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'),
-('刘警官', 'police2',  '13800000005', 'police2@example.com',  'FIELD_OFFICER',  'ENABLED', NULL, 'sha256:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'),
-('李指挥', 'command1', '13800000002', 'command1@example.com', 'COMMAND_CENTER', 'ENABLED', NULL, 'sha256:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'),
-('王队长', 'rescue1',  '13800000003', 'rescue1@example.com',  'RESCUE_WORKER',  'ENABLED', 1,    'sha256:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'),
-('陈师傅', 'rescue2',  '13800000006', 'rescue2@example.com',  'RESCUE_WORKER',  'ENABLED', 2,    'sha256:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'),
-('赵管理', 'admin1',   '13800000004', 'admin1@example.com',   'ADMIN',          'ENABLED', NULL, 'sha256:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92');
+START TRANSACTION;
 
 
 -- ============================================================
--- 2. 清障救援中心 (4个)
+-- 1. 演示用户
+--
+-- UserRole：
+-- FIELD_OFFICER
+-- COMMAND_CENTER
+-- RESCUE_WORKER
+-- ADMIN
+--
+-- UserStatus：
+-- ENABLED
+-- DISABLED
 -- ============================================================
-INSERT INTO rescue_centers (name, center_type, address, longitude, latitude, phone, status) VALUES
-('浦东清障一队',   'CLEARANCE',   '上海市浦东新区金桥路100号',   121.55, 31.25, '021-58880001', 'ACTIVE'),
-('嘉定清障救援队',  'RESCUE',      '上海市嘉定区安亭镇宝安公路88号', 121.20, 31.30, '021-58880002', 'ACTIVE'),
-('闵行工程清障队',  'MAINTENANCE', '上海市闵行区虹中路200号',   121.38, 31.12, '021-58880003', 'ACTIVE'),
-('黄浦应急救援中心', 'RESCUE',      '上海市黄浦区西藏南路300号', 121.47, 31.23, '021-58880004', 'ACTIVE');
+
+INSERT INTO `app_users`
+(
+  `id`,
+  `full_name`,
+  `username`,
+  `phone`,
+  `email`,
+  `role`,
+  `status`,
+  `password_hash`,
+  `email_verified`,
+  `created_at`,
+  `updated_at`
+)
+VALUES
+(
+  1,
+  '张警官',
+  'police1',
+  '13800000001',
+  'police1@example.com',
+  'FIELD_OFFICER',
+  'ENABLED',
+  'pbkdf2:120000:BOMBEdVEEmqcH8zqIBn1Kw==:rqIzgKvf21QfZuVkDglKrcbZkp3RxwNf9nR5/JaZIXI=',
+  1,
+  NOW(6),
+  NOW(6)
+),
+(
+  2,
+  '李指挥',
+  'command1',
+  '13800000002',
+  'command1@example.com',
+  'COMMAND_CENTER',
+  'ENABLED',
+  'pbkdf2:120000:iEDiBlsNfI5GVTXgiZMISA==:vpMA/0eHebiSuffTHO104Jf4lwHuLzhZBJhhREEVZkA=',
+  1,
+  NOW(6),
+  NOW(6)
+),
+(
+  3,
+  '王队长',
+  'rescue1',
+  '13800000003',
+  'rescue1@example.com',
+  'RESCUE_WORKER',
+  'ENABLED',
+  'pbkdf2:120000:hIx4+pWeYel6ToW4bGgBDw==:mSqVtWyVstzFWHtk2c8i1hHGf9potQ9+Hr0EUw3y664=',
+  1,
+  NOW(6),
+  NOW(6)
+),
+(
+  4,
+  '赵管理',
+  'admin1',
+  '13800000004',
+  'admin1@example.com',
+  'ADMIN',
+  'ENABLED',
+  'pbkdf2:120000:0/6bUfd2xWHHRSlka5qTrA==:ZTrCJJXnmL8ZcO6C7Oda68/d2TndkuSXJVMYoNgfc1c=',
+  1,
+  NOW(6),
+  NOW(6)
+);
 
 
 -- ============================================================
--- 3. 应急车辆 (6辆)
+-- 2. 应急车辆
+--
+-- VehicleType：
+-- AMBULANCE
+-- CLEARANCE_TRUCK
+--
+-- VehicleStatus：
+-- AVAILABLE
+-- DISPATCHED
+-- EN_ROUTE
+-- ARRIVED
+-- OUT_OF_SERVICE
+--
+-- CoordinateType：
+-- WGS84
+-- GCJ02
+-- BD09
 -- ============================================================
-INSERT INTO emergency_vehicles (vehicle_no, vehicle_name, vehicle_type, status, longitude, latitude, coordinate_type, baidu_longitude, baidu_latitude, speed_kmh, current_address, remark) VALUES
-('沪A·B3456', '浦东一号清障车', 'CLEARANCE_TRUCK', 'AVAILABLE', 121.55, 31.25, 'WGS84', 121.56, 31.25, 0,   '浦东清障一队停车场',   '5吨平板清障车'),
-('沪B·12345', '嘉定一号清障车', 'CLEARANCE_TRUCK', 'AVAILABLE', 121.20, 31.30, 'WGS84', 121.21, 31.30, 0,   '嘉定清障救援队停车场', '10吨重型清障车'),
-('沪A·C7890', '浦东工程车',     'TOW_TRUCK',       'AVAILABLE', 121.55, 31.25, 'WGS84', 121.56, 31.25, 0,   '浦东清障一队停车场',   '带吊臂工程车'),
-('沪B·D4567', '嘉定一号救护车', 'AMBULANCE',       'AVAILABLE', 121.20, 31.30, 'WGS84', 121.21, 31.30, 0,   '嘉定清障救援队停车场', '配备急救设备'),
-('沪C·E8901', '闵行工程维修车', 'TOW_TRUCK',       'MAINTENANCE',121.38, 31.12, 'WGS84', 121.39, 31.12, 0,   '闵行工程清障队停车场', '道路抢修专用'),
-('沪D·F2345', '黄浦应急救援车', 'AMBULANCE',       'AVAILABLE', 121.47, 31.23, 'WGS84', 121.48, 31.23, 0,   '黄浦应急救援中心停车场', '综合应急救援');
+
+INSERT INTO `emergency_vehicles`
+(
+  `id`,
+  `vehicle_no`,
+  `vehicle_name`,
+  `vehicle_type`,
+  `status`,
+  `longitude`,
+  `latitude`,
+  `coordinate_type`,
+  `baidu_longitude`,
+  `baidu_latitude`,
+  `speed_kmh`,
+  `current_address`,
+  `current_task_id`,
+  `remark`,
+  `created_at`,
+  `updated_at`
+)
+VALUES
+(
+  1,
+  'AMB-001',
+  '一号救护车',
+  'AMBULANCE',
+  'AVAILABLE',
+  104.070000,
+  30.660000,
+  'WGS84',
+  104.070000,
+  30.660000,
+  48.0,
+  '成都市第一人民医院附近',
+  NULL,
+  NULL,
+  NOW(6),
+  NOW(6)
+),
+(
+  2,
+  'AMB-002',
+  '二号救护车',
+  'AMBULANCE',
+  'AVAILABLE',
+  104.090000,
+  30.675000,
+  'WGS84',
+  104.090000,
+  30.675000,
+  45.0,
+  '成都市急救中心附近',
+  NULL,
+  NULL,
+  NOW(6),
+  NOW(6)
+),
+(
+  3,
+  'CLR-001',
+  '一号清障车',
+  'CLEARANCE_TRUCK',
+  'AVAILABLE',
+  104.060000,
+  30.670000,
+  'WGS84',
+  104.060000,
+  30.670000,
+  35.0,
+  '清障车停车场A区',
+  NULL,
+  NULL,
+  NOW(6),
+  NOW(6)
+),
+(
+  4,
+  'CLR-002',
+  '二号清障车',
+  'CLEARANCE_TRUCK',
+  'AVAILABLE',
+  104.100000,
+  30.650000,
+  'WGS84',
+  104.100000,
+  30.650000,
+  32.0,
+  '清障车停车场B区',
+  NULL,
+  NULL,
+  NOW(6),
+  NOW(6)
+);
 
 
+-- ============================================================
+-- 3. 系统字典数据
+--
+-- SystemDataCategory：
+-- ROAD
+-- ACCIDENT_TYPE
+-- RISK_RULE
+--
+-- 重要字段映射：
+-- Java 字段 value
+-- 数据库列 config_value
+-- ============================================================
+
+INSERT INTO `system_data`
+(
+  `id`,
+  `category`,
+  `code`,
+  `name`,
+  `config_value`,
+  `description`,
+  `enabled`,
+  `sort_order`,
+  `created_at`,
+  `updated_at`
+)
+VALUES
+(
+  1,
+  'ROAD',
+  'EXPRESSWAY',
+  '高速公路',
+  '{"level":"HIGHWAY","defaultSpeedLimit":120}',
+  '道路基础数据示例',
+  1,
+  10,
+  NOW(6),
+  NOW(6)
+),
+(
+  2,
+  'ROAD',
+  'URBAN_MAIN',
+  '城市主干路',
+  '{"level":"ARTERIAL","defaultSpeedLimit":60}',
+  '道路基础数据示例',
+  1,
+  20,
+  NOW(6),
+  NOW(6)
+),
+(
+  3,
+  'ACCIDENT_TYPE',
+  'REAR_END',
+  '追尾事故',
+  '{"defaultRisk":"MEDIUM"}',
+  '事故类型字典示例',
+  1,
+  10,
+  NOW(6),
+  NOW(6)
+),
+(
+  4,
+  'ACCIDENT_TYPE',
+  'ROLLOVER',
+  '车辆侧翻',
+  '{"defaultRisk":"HIGH"}',
+  '事故类型字典示例',
+  1,
+  20,
+  NOW(6),
+  NOW(6)
+),
+(
+  5,
+  'RISK_RULE',
+  'HIGH_RISK_LANE_BLOCK',
+  '多车道占用高风险规则',
+  '{"occupiedLanesGte":2,"riskLevel":"HIGH"}',
+  '风险等级规则示例',
+  1,
+  10,
+  NOW(6),
+  NOW(6)
+);
+
+
+<<<<<<< HEAD
 -- ============================================================
 -- 4. 事故事件 (6条) — 完整结构化字段
 -- ============================================================
@@ -477,3 +733,6 @@ INSERT INTO notification_records (receiver_user_id, channel, title, content, sta
 -- 交通事故风险智能识别与调度系统 - 演示种子数据
 -- 密码均为 123456 (SHA-256)
 -- ============================================================
+=======
+COMMIT;
+>>>>>>> d874f3e4ce1ef758c836de1a119d3c96eb622dd0
