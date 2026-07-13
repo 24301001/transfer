@@ -27,3 +27,12 @@ npm-debug.log*
 *.swp
 *.swo
 application.properties
+
+# Local Codex/runtime artifacts
+.m2/
+.tools/
+transfer-master/
+transfer-master.zip
+incident-test*.json
+test-upload.png
+frontend/.npm-cache/

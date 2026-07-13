@@ -67,6 +67,12 @@ public class Incident extends AuditableEntity {
     @Column(length = 80)
     private String confirmedAccidentType;
 
+    /**
+     * 上传照片/视频提取出的场景识别标签，逗号分隔。
+     */
+    @Column(length = 500)
+    private String sceneLabels;
+
     @Column(nullable = false, length = 1000)
     private String description;
 
@@ -85,6 +91,12 @@ public class Incident extends AuditableEntity {
      * 受伤人数（现场人员填写，AI不检测行人受伤）。
      */
     private Integer injuredCount;
+
+    /**
+     * 现场上报是否有人受伤。
+     */
+    @Column(nullable = false)
+    private Boolean injuryReported = false;
 
     /**
      * 伤情预估描述（现场人员填写）。
@@ -265,6 +277,14 @@ public class Incident extends AuditableEntity {
             String confirmedAccidentType
     ) {
         this.confirmedAccidentType = confirmedAccidentType;
+    }
+
+    public String getSceneLabels() {
+        return sceneLabels;
+    }
+
+    public void setSceneLabels(String sceneLabels) {
+        this.sceneLabels = sceneLabels;
     }
 
     public String getDescription() {
@@ -491,6 +511,14 @@ public class Incident extends AuditableEntity {
 
     public void setInjuredCount(Integer injuredCount) {
         this.injuredCount = injuredCount;
+    }
+
+    public Boolean getInjuryReported() {
+        return injuryReported;
+    }
+
+    public void setInjuryReported(Boolean injuryReported) {
+        this.injuryReported = injuryReported;
     }
 
     public String getInjuryEstimate() {

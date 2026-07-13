@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     road_name                       VARCHAR(80)  NULL     COMMENT '路段名',
     initial_accident_type           VARCHAR(80)  NULL     COMMENT '初始事故类型',
     confirmed_accident_type         VARCHAR(80)  NULL     COMMENT '确认事故类型',
+    scene_labels                    VARCHAR(500) NULL     COMMENT '照片/视频识别出的场景标签，逗号分隔',
     description                     VARCHAR(1000) NOT NULL COMMENT '事故描述',
 
     -- 坐标信息 (原始 + 百度转换)
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     people_flow                     INT          NULL     COMMENT '行人流量评估值',
     people_involved                 INT          NULL     COMMENT '涉及人数',
     injured_count                   INT          NULL     COMMENT '受伤人数',
+    injury_reported                 TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '现场上报是否有人受伤',
     injury_estimate                 VARCHAR(500) NULL     COMMENT '伤情预估描述',
     weather                         VARCHAR(40)  NULL     COMMENT '天气状况',
     road_level                      VARCHAR(40)  NULL     COMMENT '道路等级',
@@ -119,6 +121,10 @@ CREATE TABLE IF NOT EXISTS incident_attachments (
     file_size           BIGINT       NULL     COMMENT '文件大小(字节)',
     uploaded_by         BIGINT       NULL     COMMENT '上传用户ID',
     recognition_status  VARCHAR(32)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/PROCESSING/COMPLETED/NOT_REQUIRED',
+    ai_detected_types   VARCHAR(200) NULL     COMMENT 'AI检测标签，逗号分隔',
+    ai_detection_json   LONGTEXT     NULL     COMMENT 'AI完整检测结果JSON，含bbox/confidence',
+    annotated_file_url  VARCHAR(500) NULL     COMMENT '带检测框的图片/视频地址',
+    reviewed            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '指挥中心是否已查看',
     created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_incident_id (incident_id),
@@ -379,4 +385,3 @@ CREATE TABLE IF NOT EXISTS items (
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统物品';
-

@@ -69,7 +69,6 @@
             title="指挥大屏地图"
             :hint="mapMarkers.length + ' 起事故'"
             :markers="mapMarkers"
-            fit-view-once
           />
         </div>
       </el-col>
@@ -97,6 +96,24 @@
           </el-descriptions-item>
           <el-descriptions-item label="地点">{{ selectedAccident.location?.name }}</el-descriptions-item>
           <el-descriptions-item label="上报时间">{{ selectedAccident.reportTime }}</el-descriptions-item>
+          <el-descriptions-item label="场景识别" v-if="drawerDetail?.sceneLabels?.length">
+            <div class="drawer-tags">
+              <el-tag
+                v-for="label in drawerDetail.sceneLabels"
+                :key="label"
+                size="small"
+                effect="plain"
+              >
+                {{ label }}
+              </el-tag>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="是否有人受伤">
+            <el-tag :type="(drawerDetail || selectedAccident).injuryReported ? 'danger' : 'success'" size="small">
+              {{ (drawerDetail || selectedAccident).injuryReported ? '是' : '否' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="受伤人数">{{ (drawerDetail || selectedAccident).injuredCount || 0 }}人</el-descriptions-item>
           <el-descriptions-item label="预计拥堵">{{ selectedAccident.congestionDuration }}</el-descriptions-item>
           <el-descriptions-item label="恢复时间">{{ selectedAccident.recoveryTime }}</el-descriptions-item>
           <el-descriptions-item label="影响车道">{{ selectedAccident.affectedLanes }}</el-descriptions-item>
@@ -118,6 +135,37 @@
         <div v-if="selectedAccident.description" class="drawer-section">
           <h4 class="drawer-section-title">事故描述</h4>
           <p class="drawer-section-text">{{ selectedAccident.description }}</p>
+        </div>
+
+        <div v-if="drawerDetail?.media?.length" class="drawer-section">
+          <h4 class="drawer-section-title">带框现场媒体</h4>
+          <div v-if="drawerDetail.media.some(item => item.hasAnnotatedMedia)" class="drawer-media">
+            <template
+              v-for="item in drawerDetail.media.filter(item => item.hasAnnotatedMedia)"
+              :key="item.id"
+            >
+              <el-image
+                v-if="item.type === 'PHOTO'"
+                :src="item.url"
+                :preview-src-list="drawerDetail.media.filter(i => i.hasAnnotatedMedia && i.type === 'PHOTO').map(i => i.url)"
+                fit="cover"
+                class="drawer-image"
+              />
+              <video
+                v-else-if="item.type === 'VIDEO'"
+                :src="item.url"
+                controls
+                class="drawer-video"
+              ></video>
+            </template>
+          </div>
+          <el-alert
+            v-else
+            title="暂无带框检测结果，请确认 YOLO 检测服务已返回 output_image_url / output_video_url"
+            type="warning"
+            :closable="false"
+            show-icon
+          />
         </div>
 
         <!-- 处置反馈（从详情接口获取） -->
@@ -514,5 +562,25 @@ onUnmounted(() => {
 
 .feedback-text {
   color: $text-primary;
+}
+
+.drawer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.drawer-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.drawer-image,
+.drawer-video {
+  width: 100%;
+  height: 110px;
+  border-radius: 8px;
+  background: #000;
 }
 </style>

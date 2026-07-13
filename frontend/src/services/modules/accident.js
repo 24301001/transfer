@@ -1,5 +1,7 @@
 import request from '../request'
 
+const UPLOAD_DETECTION_TIMEOUT = 10 * 60 * 1000
+
 // ====== 枚举映射 ======
 
 /** 后端事故状态 → 前端中文状态 */
@@ -72,6 +74,56 @@ function formatConfidence(value) {
   return (value * 100).toFixed(1) + '%'
 }
 
+function splitLabels(value) {
+  if (!value) return []
+  return Array.from(new Set(String(value)
+    .split(',')
+    .map(normalizeSceneLabel)
+    .filter(Boolean)))
+}
+
+function normalizeSceneLabel(value) {
+  const label = String(value || '').trim()
+  const normalized = label.toLowerCase().replace(/_/g, ' ')
+  const map = {
+    'car flip': 'car flip',
+    rollover: 'car flip',
+    overturn: 'car flip',
+    'car crash': 'car crash',
+    crash: 'car crash',
+    collision: 'car crash',
+    'car damage': 'car damage',
+    damage: 'car damage',
+    fire: 'fire/smoke',
+    smoke: 'fire/smoke',
+    'fire/smoke': 'fire/smoke',
+  }
+  return map[normalized] || label
+}
+
+function parseJson(value) {
+  if (!value) return null
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return null
+  }
+}
+
+function resolveAnnotatedUrl(attachment) {
+  if (attachment.annotatedFileUrl) return attachment.annotatedFileUrl
+  const detection = parseJson(attachment.aiDetectionJson)
+  return detection?.output_video_url
+    || detection?.outputVideoUrl
+    || detection?.output_image_url
+    || detection?.outputImageUrl
+    || ''
+}
+
+function attachmentFileUrl(incidentId, attachmentId) {
+  return `/api/v1/incidents/${incidentId}/attachments/${attachmentId}/file`
+}
+
 /** 转换后端 Incident 对象 → 前端事故对象（列表用） */
 function transformIncident(inc) {
   return {
@@ -100,6 +152,11 @@ function transformIncident(inc) {
     trafficFlow: inc.trafficFlow || '-',
     weather: inc.weather || '-',
     roadLevel: inc.roadLevel || '-',
+    sceneLabels: splitLabels(inc.sceneLabels),
+    injuryReported: !!inc.injuryReported || (inc.injuredCount || 0) > 0,
+    peopleInvolved: inc.peopleInvolved ?? 0,
+    injuredCount: inc.injuredCount ?? 0,
+    injuryEstimate: inc.injuryEstimate || '',
     riskScore: inc.riskLevel ? { LOW: 20, MEDIUM: 40, HIGH: 70, CRITICAL: 90 }[inc.riskLevel] : 0,
     // 处置建议
     disposalAdvice: inc.suggestion || '',
@@ -107,6 +164,8 @@ function transformIncident(inc) {
     aiExplanation: inc.explanation || '',
     needSupport: [],
     // 附件（列表接口不含附件，留空）
+    media: [],
+    videos: [],
     images: [],
     processRecords: [],
   }
@@ -120,11 +179,23 @@ function transformIncidentDetail(data) {
   // 附加附件（通过后端文件接口加载）
   const incidentId = data.incident?.id || base.id
   if (data.attachments && Array.isArray(data.attachments)) {
-    base.images = data.attachments.map((a) => ({
+    base.media = data.attachments.map((a) => ({
       id: a.id,
-      url: `/api/v1/incidents/${incidentId}/attachments/${a.id}/file`,
+      url: resolveAnnotatedUrl(a) || attachmentFileUrl(incidentId, a.id),
+      originalUrl: attachmentFileUrl(incidentId, a.id),
       name: a.originalFilename || a.fileName,
+      type: a.attachmentType || 'OTHER',
+      contentType: a.contentType || '',
+      recognitionStatus: a.recognitionStatus || '',
+      aiDetectedTypes: splitLabels(a.aiDetectedTypes),
+      aiDetectionJson: a.aiDetectionJson || '',
+      annotatedFileUrl: resolveAnnotatedUrl(a),
+      hasAnnotatedMedia: !!resolveAnnotatedUrl(a),
     }))
+    base.images = base.media.filter((item) => item.type === 'PHOTO')
+    base.videos = base.media.filter((item) => item.type === 'VIDEO')
+    const labels = base.media.flatMap((item) => item.aiDetectedTypes)
+    base.sceneLabels = Array.from(new Set([...base.sceneLabels, ...labels]))
   }
 
   // 附加预测结果
@@ -210,8 +281,14 @@ export async function addAccident(data) {
     latitude: data.location?.lat,
     coordinateType: data.coordinateType || null,
     initialAccidentType: data.accidentType || '',
+    sceneLabels: (data.sceneLabels || []).join(','),
     description: data.description || '',
     reportUserId: data.reporterId || null,
+    occupiedLanes: data.occupiedLanes || null,
+    peopleInvolved: data.peopleInvolved || null,
+    injuredCount: data.injuredCount || null,
+    injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
+    injuryEstimate: data.injuryEstimate || '',
   }
 
   const res = await request.post('/v1/incidents', body)
@@ -241,9 +318,14 @@ export async function addAccidentWithAttachments(data) {
     latitude: data.location?.lat,
     coordinateType: data.coordinateType || null,
     initialAccidentType: data.accidentType || '',
+    sceneLabels: (data.sceneLabels || []).join(','),
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    peopleInvolved: data.peopleInvolved || null,
+    injuredCount: data.injuredCount || null,
+    injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
+    injuryEstimate: data.injuryEstimate || '',
   }
   formData.append('incident', new Blob([JSON.stringify(body)], { type: 'application/json' }))
 
@@ -255,6 +337,7 @@ export async function addAccidentWithAttachments(data) {
 
   const res = await request.post('/v1/incidents/with-attachments', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_DETECTION_TIMEOUT,
   })
 
   // with-attachments 返回 IncidentDetailResponse: { incident, attachments, ... }
@@ -281,7 +364,7 @@ function transformPublicReportResponse(data) {
 
   return {
     incidentDetail: data.incidentDetail ? transformIncidentDetail(data.incidentDetail) : null,
-    aiDetectedType: aiDetected || null,
+    aiDetectedType: aiDetected || data.incidentDetail?.incident?.sceneLabels || null,
     immediateAdvice: data.immediateAdvice ? {
       calmingMessage: data.immediateAdvice.calmingMessage || '',
       immediateAdvice: data.immediateAdvice.immediateAdvice || '',
@@ -317,11 +400,13 @@ export async function publicReport(data) {
     latitude: data.location?.lat,
     coordinateType: data.coordinateType || null,
     initialAccidentType: data.accidentType || '',
+    sceneLabels: (data.sceneLabels || []).join(','),
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
     peopleInvolved: data.peopleInvolved || null,
     injuredCount: data.injuredCount || null,
+    injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
     injuryEstimate: data.injuryEstimate || '',
   }
   const res = await request.post('/v1/incidents/public-report', body)
@@ -349,11 +434,13 @@ export async function publicReportWithAttachments(data) {
     latitude: data.location?.lat,
     coordinateType: data.coordinateType || null,
     initialAccidentType: data.accidentType || '',
+    sceneLabels: (data.sceneLabels || []).join(','),
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
     peopleInvolved: data.peopleInvolved || null,
     injuredCount: data.injuredCount || null,
+    injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
     injuryEstimate: data.injuryEstimate || '',
   }
   formData.append('incident', new Blob([JSON.stringify(body)], { type: 'application/json' }))
@@ -371,6 +458,7 @@ export async function publicReportWithAttachments(data) {
 
   const res = await request.post('/v1/incidents/public-report', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_DETECTION_TIMEOUT,
   })
 
   return {

@@ -50,9 +50,9 @@ INSERT INTO emergency_vehicles (vehicle_no, vehicle_name, vehicle_type, status, 
 INSERT INTO incidents (
     incident_no, location_name, address, road_name, longitude, latitude, coordinate_type,
     baidu_longitude, baidu_latitude,
-    initial_accident_type, description,
+    initial_accident_type, scene_labels, description,
     occupied_lanes, traffic_flow, people_flow,
-    people_involved, injured_count, injury_estimate,
+    people_involved, injured_count, injury_reported, injury_estimate,
     weather, road_level, road_status,
     status, risk_level,
     predicted_congestion_minutes, predicted_recovery_minutes, confidence,
@@ -66,9 +66,9 @@ INSERT INTO incidents (
 ('ACC20260707001', 'G15 沈海高速 K1200+500 段（北向）',
  '上海市浦东新区G15沈海高速北行K1200处', 'G15 沈海高速', 121.55, 31.25, 'WGS84',
  121.560, 31.255,
- '追尾事故', '小型轿车与SUV追尾，占用左侧车道，1人轻伤',
+ '追尾事故', 'car crash,car damage', '小型轿车与SUV追尾，占用左侧车道，1人轻伤',
  1, 3, 10,
- 3, 1, '轻伤1人（驾驶员擦伤），其余人员无恙',
+ 3, 1, 1, '轻伤1人（驾驶员擦伤），其余人员无恙',
  '晴', '高速', '干燥',
  'REPORTED', 'LOW',
  25, 35, 0.92,
@@ -82,9 +82,9 @@ INSERT INTO incidents (
 ('ACC20260707002', 'G2 京沪高速 K980+200 段（南向）',
  '上海市嘉定区G2京沪高速南行K980处', 'G2 京沪高速', 121.28, 31.32, 'WGS84',
  121.290, 31.325,
- '车辆碰撞', '两辆货车发生侧面碰撞，占用中间两条车道，2人重伤',
+ '车辆碰撞', 'car crash,car damage', '两辆货车发生侧面碰撞，占用中间两条车道，2人重伤',
  2, 5, 5,
- 4, 2, '重伤2人（疑似骨折），需120急救',
+ 4, 2, 1, '重伤2人（疑似骨折），需120急救',
  '多云', '高速', '干燥',
  'PROCESSING', 'HIGH',
  60, 90, 0.87,
@@ -98,9 +98,9 @@ INSERT INTO incidents (
 ('ACC20260707003', '中环路 汶水路段（西向）',
  '上海市普陀区中环路汶水路段', '中环路', 121.40, 31.26, 'WGS84',
  121.410, 31.265,
- '施工占道', '道路施工占道，导致双向各仅剩一条车道通行',
+ '施工占道', 'car damage', '道路施工占道，导致双向各仅剩一条车道通行',
  2, 6, 20,
- 0, 0, NULL,
+ 0, 0, 0, NULL,
  '小雨', '快速路', '湿滑',
  'CLEARED', 'MEDIUM',
  45, 60, 0.85,
@@ -114,9 +114,9 @@ INSERT INTO incidents (
 ('ACC20260707004', 'S20 外环高速 K85+300 段（内圈）',
  '上海市闵行区S20外环高速内圈K85处', 'S20 外环高速', 121.38, 31.12, 'WGS84',
  121.390, 31.125,
- '货物散落', '货车货物散落，占用全部车道，1人受轻伤，需吊车清理',
+ '货物散落', 'car damage', '货车货物散落，占用全部车道，1人受轻伤，需吊车清理',
  3, 4, 8,
- 2, 1, '轻伤1人（货主被货物擦伤），无生命危险',
+ 2, 1, 1, '轻伤1人（货主被货物擦伤），无生命危险',
  '晴', '高速', '干燥',
  'PROCESSING', 'CRITICAL',
  90, 120, 0.94,
@@ -130,9 +130,9 @@ INSERT INTO incidents (
 ('ACC20260707005', '南北高架 北京路段（南向）',
  '上海市黄浦区南北高架北京路段', '南北高架', 121.47, 31.23, 'WGS84',
  121.480, 31.235,
- '车辆自燃', '车辆自燃，火势已控制，占用应急车道和部分行车道',
+ '车辆自燃', 'fire/smoke,car damage', '车辆自燃，火势已控制，占用应急车道和部分行车道',
  2, 7, 30,
- 1, 0, '无人员伤亡，车辆已烧毁',
+ 1, 0, 0, '无人员伤亡，车辆已烧毁',
  '晴', '快速路', '干燥',
  'REPORTED', 'HIGH',
  55, 80, 0.89,
@@ -146,9 +146,9 @@ INSERT INTO incidents (
 ('ACC20260707006', '延安高架 虹桥枢纽入口（东向）',
  '上海市长宁区延安高架虹桥枢纽', '延安高架', 121.35, 31.21, 'WGS84',
  121.360, 31.215,
- '追尾事故', '护栏损坏，车辆单方事故，占用紧急停车带',
+ '追尾事故', 'car damage', '护栏损坏，车辆单方事故，占用紧急停车带',
  1, 2, 8,
- 1, 0, NULL,
+ 1, 0, 0, NULL,
  '大雾', '主干道', '干燥',
  'CLOSED', 'LOW',
  15, 25, 0.78,
@@ -162,11 +162,15 @@ INSERT INTO incidents (
 -- ============================================================
 -- 5. 事故附件 (4条)
 -- ============================================================
-INSERT INTO incident_attachments (incident_id, file_name, original_filename, content_type, attachment_type, file_path, file_size, uploaded_by, recognition_status) VALUES
-(1, 'a1b2c3d4-001.jpg', '现场照片_追尾_1.jpg', 'image/jpeg', 'PHOTO', '/uploads/a1b2c3d4-001.jpg', 245760,  1, 'COMPLETED'),
-(1, 'a1b2c3d4-002.jpg', '现场照片_追尾_2.jpg', 'image/jpeg', 'PHOTO', '/uploads/a1b2c3d4-002.jpg', 312400,  1, 'COMPLETED'),
-(2, 'e5f6g7h8-001.jpg', '现场照片_碰撞.jpg',     'image/jpeg', 'PHOTO', '/uploads/e5f6g7h8-001.jpg', 189320,  5, 'COMPLETED'),
-(4, 'i9j0k1l2-001.mp4', '现场视频_散落.webm',    'video/webm', 'VIDEO', '/uploads/i9j0k1l2-001.mp4', 5242880, 5, 'NOT_REQUIRED');
+INSERT INTO incident_attachments (
+    incident_id, file_name, original_filename, content_type, attachment_type,
+    file_path, file_size, uploaded_by, recognition_status,
+    ai_detected_types, annotated_file_url, reviewed
+) VALUES
+(1, 'a1b2c3d4-001.jpg', '现场照片_追尾_1.jpg', 'image/jpeg', 'PHOTO', '/uploads/a1b2c3d4-001.jpg', 245760,  1, 'COMPLETED', 'car crash,car damage', NULL, 0),
+(1, 'a1b2c3d4-002.jpg', '现场照片_追尾_2.jpg', 'image/jpeg', 'PHOTO', '/uploads/a1b2c3d4-002.jpg', 312400,  1, 'COMPLETED', 'car damage', NULL, 0),
+(2, 'e5f6g7h8-001.jpg', '现场照片_碰撞.jpg',     'image/jpeg', 'PHOTO', '/uploads/e5f6g7h8-001.jpg', 189320,  5, 'COMPLETED', 'car crash,car damage', NULL, 0),
+(4, 'i9j0k1l2-001.mp4', '现场视频_散落.webm',    'video/webm', 'VIDEO', '/uploads/i9j0k1l2-001.mp4', 5242880, 5, 'COMPLETED', 'car damage', NULL, 0);
 
 
 -- ============================================================
@@ -473,4 +477,3 @@ INSERT INTO notification_records (receiver_user_id, channel, title, content, sta
 -- 交通事故风险智能识别与调度系统 - 演示种子数据
 -- 密码均为 123456 (SHA-256)
 -- ============================================================
-

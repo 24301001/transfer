@@ -164,6 +164,10 @@ public class IncidentService {
                 trimToNull(request.initialAccidentType())
         );
 
+        incident.setSceneLabels(
+                normalizeCsvLabels(request.sceneLabels())
+        );
+
         incident.setDescription(
                 request.description().trim()
         );
@@ -198,6 +202,12 @@ public class IncidentService {
 
         incident.setInjuredCount(
                 request.injuredCount()
+        );
+
+        incident.setInjuryReported(
+                Boolean.TRUE.equals(request.injuryReported())
+                        || (request.injuredCount() != null
+                        && request.injuredCount() > 0)
         );
 
         incident.setInjuryEstimate(
@@ -595,6 +605,7 @@ public class IncidentService {
                     if (result != null && result.success()) {
                         att.setAiDetectedTypes(String.join(",", result.accidentTypes()));
                         att.setAiDetectionJson(result.rawJson());
+                        att.setAnnotatedFileUrl(result.outputUrl());
                         att.setRecognitionStatus("COMPLETED");
                         allAccidentTypes.addAll(result.accidentTypes());
                     } else {
@@ -608,6 +619,7 @@ public class IncidentService {
                     if (result != null && result.success()) {
                         att.setAiDetectedTypes(String.join(",", result.accidentTypes()));
                         att.setAiDetectionJson(result.rawJson());
+                        att.setAnnotatedFileUrl(result.outputUrl());
                         att.setRecognitionStatus("COMPLETED");
                         allAccidentTypes.addAll(result.accidentTypes());
                     } else {
@@ -629,13 +641,40 @@ public class IncidentService {
 
         // 自动填充事故类型（AI检测结果 → initialAccidentType）
         if (!allAccidentTypes.isEmpty()) {
-            String aiType = String.join(",", allAccidentTypes);
+            String aiType = mergeCsvLabels(incident.getSceneLabels(), allAccidentTypes);
+            incident.setSceneLabels(aiType);
             if (incident.getInitialAccidentType() == null || incident.getInitialAccidentType().isBlank()) {
                 incident.setInitialAccidentType(aiType);
             }
             incidentRepository.save(incident);
             log.info("事故 {} YOLOv5 AI检测类型: {}", incident.getIncidentNo(), aiType);
         }
+    }
+
+    private String normalizeCsvLabels(String labels) {
+        if (labels == null || labels.isBlank()) {
+            return null;
+        }
+        java.util.Set<String> normalized = java.util.Arrays.stream(labels.split(","))
+                .map(String::trim)
+                .filter(label -> !label.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        return normalized.isEmpty() ? null : String.join(",", normalized);
+    }
+
+    private String mergeCsvLabels(String existingLabels, java.util.Collection<String> newLabels) {
+        java.util.Set<String> merged = new java.util.LinkedHashSet<>();
+        String normalizedExisting = normalizeCsvLabels(existingLabels);
+        if (normalizedExisting != null) {
+            merged.addAll(java.util.Arrays.asList(normalizedExisting.split(",")));
+        }
+        if (newLabels != null) {
+            newLabels.stream()
+                    .map(label -> label == null ? "" : label.trim())
+                    .filter(label -> !label.isBlank())
+                    .forEach(merged::add);
+        }
+        return merged.isEmpty() ? null : String.join(",", merged);
     }
 
     private void uploadOptionalFiles(

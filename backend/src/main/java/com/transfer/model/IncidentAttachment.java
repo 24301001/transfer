@@ -2,6 +2,7 @@ package com.transfer.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 @Entity
@@ -45,8 +46,14 @@ public class IncidentAttachment extends AuditableEntity {
     /**
      * YOLOv5 完整检测结果 JSON（含 bbox、confidence 等）。
      */
-    @Column(columnDefinition = "LONGTEXT")
+    @Lob
     private String aiDetectionJson;
+
+    /**
+     * YOLOv5 输出的带检测框图片/视频地址。
+     */
+    @Column(length = 500)
+    private String annotatedFileUrl;
 
     /**
      * 指挥中心是否已查看。
@@ -140,6 +147,14 @@ public class IncidentAttachment extends AuditableEntity {
 
     public void setAiDetectionJson(String aiDetectionJson) {
         this.aiDetectionJson = aiDetectionJson;
+    }
+
+    public String getAnnotatedFileUrl() {
+        return annotatedFileUrl;
+    }
+
+    public void setAnnotatedFileUrl(String annotatedFileUrl) {
+        this.annotatedFileUrl = annotatedFileUrl;
     }
 
     public Boolean getReviewed() {

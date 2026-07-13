@@ -27,11 +27,14 @@
         </div>
       </div>
 
-      <!-- 图片 + 基本信息 -->
+      <!-- 现场媒体 + 基本信息 -->
       <el-row :gutter="16" style="margin-top:16px;">
         <el-col :span="10">
           <div class="page-card">
-            <h3 class="section-title">事故照片</h3>
+            <h3 class="section-title">现场媒体</h3>
+            <div class="media-mode-title" v-if="accident.media?.some(item => item.hasAnnotatedMedia)">
+              已显示带框检测结果
+            </div>
             <div class="image-gallery" v-if="accident.images?.length">
               <el-image
                 v-for="(img, idx) in accident.images"
@@ -42,7 +45,34 @@
                 class="gallery-img"
               />
             </div>
-            <el-empty v-else description="暂无照片" :image-size="60" />
+            <div class="video-gallery" v-if="accident.videos?.length">
+              <video
+                v-for="video in accident.videos"
+                :key="video.id"
+                :src="video.url"
+                controls
+                class="gallery-video"
+              ></video>
+            </div>
+            <el-alert
+              v-if="accident.media?.length && !accident.media.some(item => item.hasAnnotatedMedia)"
+              title="暂无带框检测结果，当前仅可查看原始媒体"
+              type="warning"
+              :closable="false"
+              show-icon
+              class="media-alert"
+            />
+            <div v-if="accident.media?.some(item => item.aiDetectedTypes?.length)" class="media-labels">
+              <el-tag
+                v-for="label in accident.sceneLabels"
+                :key="label"
+                size="small"
+                effect="plain"
+              >
+                {{ label }}
+              </el-tag>
+            </div>
+            <el-empty v-if="!accident.media?.length" description="暂无现场媒体" :image-size="60" />
           </div>
         </el-col>
         <el-col :span="14">
@@ -59,6 +89,27 @@
               <el-descriptions-item label="天气">{{ accident.weather }}</el-descriptions-item>
               <el-descriptions-item label="当前车流">{{ accident.trafficFlow }}</el-descriptions-item>
               <el-descriptions-item label="识别可信度">{{ accident.confidence }}</el-descriptions-item>
+              <el-descriptions-item label="是否有人受伤">
+                <el-tag :type="accident.injuryReported ? 'danger' : 'success'" size="small">
+                  {{ accident.injuryReported ? '是' : '否' }}
+                </el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="受伤人数">{{ accident.injuredCount }}人</el-descriptions-item>
+              <el-descriptions-item v-if="accident.injuryEstimate" label="伤情描述" :span="2">
+                {{ accident.injuryEstimate }}
+              </el-descriptions-item>
+              <el-descriptions-item v-if="accident.sceneLabels?.length" label="场景识别" :span="2">
+                <div class="description-tags">
+                  <el-tag
+                    v-for="label in accident.sceneLabels"
+                    :key="label"
+                    size="small"
+                    effect="plain"
+                  >
+                    {{ label }}
+                  </el-tag>
+                </div>
+              </el-descriptions-item>
             </el-descriptions>
 
             <!-- 百度地图 -->
@@ -296,6 +347,45 @@ function createDispatch() {
 
     &:hover { opacity: 0.85; }
   }
+}
+
+.video-gallery {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.gallery-video {
+  width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  background: #000;
+}
+
+.media-labels,
+.description-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.media-labels {
+  margin-top: 12px;
+}
+
+.media-mode-title {
+  display: inline-flex;
+  margin-bottom: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba($success, 0.08);
+  color: $success;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.media-alert {
+  margin-top: 10px;
 }
 
 .predict-value {

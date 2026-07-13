@@ -191,7 +191,7 @@ public class YoloDetectClient {
             for (Map<String, Object> det : detections) {
                 String className = (String) det.get("class_name");
                 if (className != null && !EXCLUDED_CLASSES.contains(className)) {
-                    accidentTypes.add(className);
+                    accidentTypes.add(normalizeAccidentLabel(className));
                 }
             }
         }
@@ -224,7 +224,7 @@ public class YoloDetectClient {
                         int count = entry.getValue() instanceof Number
                                 ? ((Number) entry.getValue()).intValue() : 0;
                         if (count > 0) {
-                            accidentTypes.add(entry.getKey());
+                            accidentTypes.add(normalizeAccidentLabel(entry.getKey()));
                         }
                     }
                 }
@@ -245,6 +245,20 @@ public class YoloDetectClient {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String normalizeAccidentLabel(String label) {
+        String normalized = label == null
+                ? ""
+                : label.trim().toLowerCase().replace("_", " ");
+
+        return switch (normalized) {
+            case "rollover", "overturn", "car rollover", "car overturn" -> "car flip";
+            case "crash", "collision" -> "car crash";
+            case "damage" -> "car damage";
+            case "fire", "smoke" -> "fire/smoke";
+            default -> label == null ? "" : label.trim();
+        };
     }
 
     // ---- 结果 DTO ----

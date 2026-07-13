@@ -15,12 +15,33 @@
         <!-- 现场视频 -->
         <el-form-item label="现场视频">
           <div class="video-recorder">
-            <div v-if="!videoBlob && !recording" class="video-placeholder">
-              <el-icon :size="48"><VideoCamera /></el-icon>
-              <p>录制现场视频</p>
-              <el-button type="primary" icon="VideoCamera" @click="startRecording">
-                开始录制
-              </el-button>
+            <div v-if="!selectedVideo && !recording" class="video-placeholder">
+              <div class="video-choice">
+                <div class="video-choice-item">
+                  <el-icon :size="40"><VideoCamera /></el-icon>
+                  <p>拍摄现场视频</p>
+                  <el-button type="primary" @click="startRecording">
+                    <el-icon><VideoCamera /></el-icon>
+                    开始录制
+                  </el-button>
+                </div>
+                <div class="video-choice-divider"></div>
+                <div class="video-choice-item">
+                  <el-icon :size="40"><Upload /></el-icon>
+                  <p>上传已有视频</p>
+                  <el-upload
+                    :auto-upload="false"
+                    :show-file-list="false"
+                    accept="video/mp4,video/webm,video/quicktime,video/*"
+                    :on-change="handleVideoUpload"
+                  >
+                    <el-button>
+                      <el-icon><Upload /></el-icon>
+                      选择视频
+                    </el-button>
+                  </el-upload>
+                </div>
+              </div>
             </div>
 
             <div v-if="recording" class="video-recording">
@@ -44,7 +65,7 @@
               </el-button>
             </div>
 
-            <div v-if="videoBlob && !recording" class="video-preview">
+            <div v-if="selectedVideo && !recording" class="video-preview">
               <video
                 ref="videoRef"
                 :src="videoUrl"
@@ -52,8 +73,9 @@
                 class="preview-video"
               ></video>
               <div class="video-info">
-                <span class="video-size">{{ formatSize(videoBlob.size) }}</span>
-                <span class="video-duration">20秒</span>
+                <span class="video-size">{{ selectedVideo.name }}</span>
+                <span class="video-size">{{ formatSize(selectedVideo.raw.size) }}</span>
+                <span class="video-duration">{{ selectedVideo.source === 'record' ? '拍摄视频' : '上传视频' }}</span>
               </div>
               <div class="video-actions">
                 <el-button type="primary" icon="VideoCamera" @click="startRecording">
@@ -115,15 +137,43 @@
           </div>
         </el-form-item>
 
-        <!-- 事故类型 -->
-        <el-form-item label="事故类型" prop="accidentType">
-          <div class="type-picker">
-            <el-select
-              v-model="form.accidentType"
-              placeholder="选择事故类型（AI将自动识别）"
-              clearable
-              style="width:320px"
+        <!-- 场景识别标签（照片/视频自动提取后支持人工复核） -->
+        <el-form-item label="场景识别">
+          <div class="scene-recognition-field">
+            <el-checkbox-group v-model="form.sceneLabels" class="scene-labels">
+              <el-checkbox
+                v-for="label in SCENE_LABEL_OPTIONS"
+                :key="label"
+                :label="label"
+              />
+            </el-checkbox-group>
+            <p class="scene-tip">
+              {{ recognizedSceneLabels.length ? '已根据上传照片/视频自动勾选，可人工复核修改' : '可先人工勾选，提交后系统会从照片/视频中补充识别标签' }}
+            </p>
+          </div>
+        </el-form-item>
+
+        <el-form-item v-if="extraSceneLabels.length" label="其他标签">
+          <div class="scene-extra-tags">
+            <el-tag
+              v-for="label in extraSceneLabels"
+              :key="label"
+              size="small"
+              effect="plain"
             >
+              {{ label }}
+            </el-tag>
+          </div>
+        </el-form-item>
+
+        <el-form-item v-if="aiDetectedType" label="AI识别">
+          <el-tag type="success" effect="dark">{{ aiDetectedType }}</el-tag>
+        </el-form-item>
+
+        <!-- 旧数据兼容：事故类型由 AI 标签自动写入，不再让用户手动选择 -->
+        <el-form-item v-if="false" label="事故类型" prop="accidentType">
+          <div class="type-picker">
+            <el-select v-model="form.accidentType" clearable style="width:320px">
               <el-option
                 v-for="t in ACCIDENT_TYPE_OPTIONS"
                 :key="t"
@@ -131,20 +181,25 @@
                 :value="t"
               />
             </el-select>
-            <el-tag v-if="aiDetectedType" type="success" effect="dark" style="margin-left:8px;">
-              AI识别: {{ aiDetectedType }}
-            </el-tag>
           </div>
         </el-form-item>
 
-        <!-- 行人受伤（现场人员手动填写，AI不检测） -->
+        <!-- 人员受伤（现场人员手动填写） -->
+        <el-form-item label="是否受伤">
+          <el-switch
+            v-model="form.injuryReported"
+            active-text="有人受伤"
+            inactive-text="无人受伤"
+            @change="onInjuryReportedChange"
+          />
+        </el-form-item>
         <el-form-item label="涉及人数">
           <el-input-number v-model="form.peopleInvolved" :min="0" placeholder="0" style="width:160px" />
         </el-form-item>
-        <el-form-item label="受伤人数">
+        <el-form-item v-if="form.injuryReported" label="受伤人数">
           <el-input-number v-model="form.injuredCount" :min="0" placeholder="0" style="width:160px" />
         </el-form-item>
-        <el-form-item label="伤情描述">
+        <el-form-item v-if="form.injuryReported" label="伤情描述">
           <el-input
             v-model="form.injuryEstimate"
             type="textarea"
@@ -197,6 +252,10 @@
           <span class="summary-label">识别状态</span>
           <span v-if="result" class="summary-value success">已完成</span>
           <span v-else class="summary-value pending">分析中...</span>
+        </div>
+        <div class="summary-item" v-if="recognizedSceneLabels.length">
+          <span class="summary-label">场景标签</span>
+          <span class="summary-value">{{ recognizedSceneLabels.join('、') }}</span>
         </div>
       </div>
       <div class="submission-actions">
@@ -293,6 +352,16 @@
         <!-- ── 4. 事故识别结果 ── -->
         <div class="result-section">
           <h4>事故识别结果</h4>
+          <div v-if="recognizedSceneLabels.length" class="result-labels">
+            <span class="label-title">场景识别</span>
+            <el-checkbox-group :model-value="recognizedSceneLabels" disabled>
+              <el-checkbox
+                v-for="label in SCENE_LABEL_OPTIONS"
+                :key="label"
+                :label="label"
+              />
+            </el-checkbox-group>
+          </div>
           <el-row :gutter="20">
             <el-col :span="8">
               <div class="result-stat">
@@ -308,8 +377,8 @@
             </el-col>
             <el-col :span="8">
               <div class="result-stat">
-                <span class="stat-label">识别可信度</span>
-                <span class="stat-value">{{ result.confidence }}</span>
+                <span class="stat-label">是否有人受伤</span>
+                <span class="stat-value">{{ result.injuryReported ? '是' : '否' }}</span>
               </div>
             </el-col>
           </el-row>
@@ -423,14 +492,15 @@ const form = reactive({
   locationLat: null,  // WGS84 纬度
   locationLng: null,  // WGS84 经度
   accidentType: '',
+  sceneLabels: [],
   description: '',
   peopleInvolved: null,
   injuredCount: null,
   injuryEstimate: '',
+  injuryReported: false,
 })
 
 const rules = {
-  images: [{ required: true, message: '请上传至少一张事故照片', trigger: 'change' }],
   locationStr: [{ required: true, message: '请在地图上选择事故地点', trigger: 'change' }],
   description: [{ required: true, message: '请输入事故描述', trigger: 'blur' }],
   accidentType: [{ required: false }],
@@ -461,6 +531,22 @@ watch(
 // 地图中心（BD09 坐标系，用于传递给 MapCard）
 const mapCenter = ref(null)
 
+const SCENE_LABEL_OPTIONS = ['car flip', 'car crash', 'car damage', 'fire/smoke']
+
+const recognizedSceneLabels = computed(() => {
+  if (result.value?.sceneLabels?.length) return result.value.sceneLabels
+  if (form.sceneLabels.length) return form.sceneLabels
+  if (!aiDetectedType.value) return []
+  return aiDetectedType.value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+})
+
+const extraSceneLabels = computed(() =>
+  recognizedSceneLabels.value.filter((label) => !SCENE_LABEL_OPTIONS.includes(label))
+)
+
 // 事故类型预设
 const ACCIDENT_TYPE_OPTIONS = [
   '追尾事故', '正面碰撞', '侧面刮擦', '车辆侧翻',
@@ -470,6 +556,7 @@ const ACCIDENT_TYPE_OPTIONS = [
 // ====== 视频录制状态 ======
 const recording = ref(false)
 const videoBlob = ref(null)
+const uploadedVideoFile = ref(null)
 const videoUrl = ref('')
 const recordElapsed = ref(0)
 let mediaRecorder = null
@@ -477,6 +564,16 @@ let mediaStream = null
 let recordTimer = null
 const cameraRef = ref(null)
 const videoRef = ref(null)
+
+const selectedVideo = computed(() => {
+  if (uploadedVideoFile.value) return uploadedVideoFile.value
+  if (!videoBlob.value) return null
+  return {
+    raw: videoBlob.value,
+    name: '现场视频.webm',
+    source: 'record',
+  }
+})
 
 function formatTime(seconds) {
   const m = String(Math.floor(seconds / 60)).padStart(2, '0')
@@ -496,6 +593,7 @@ async function startRecording() {
       URL.revokeObjectURL(videoUrl.value)
       videoUrl.value = ''
     }
+    uploadedVideoFile.value = null
     videoBlob.value = null
 
     mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -551,6 +649,26 @@ async function startRecording() {
   }
 }
 
+function handleVideoUpload(uploadFile) {
+  const file = uploadFile.raw
+  if (!file) return
+  if (!file.type?.startsWith('video/')) {
+    ElMessage.warning('请选择视频文件')
+    return
+  }
+  if (videoUrl.value) {
+    URL.revokeObjectURL(videoUrl.value)
+  }
+  videoBlob.value = null
+  uploadedVideoFile.value = {
+    raw: file,
+    name: file.name,
+    source: 'upload',
+  }
+  videoUrl.value = URL.createObjectURL(file)
+  ElMessage.success('视频已选择')
+}
+
 function stopRecording() {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()
@@ -566,8 +684,18 @@ function removeVideo() {
     URL.revokeObjectURL(videoUrl.value)
   }
   videoBlob.value = null
+  uploadedVideoFile.value = null
   videoUrl.value = ''
   videoRef.value = null
+}
+
+function onInjuryReportedChange(value) {
+  if (!value) {
+    form.injuredCount = 0
+    form.injuryEstimate = ''
+  } else if (!form.injuredCount || form.injuredCount < 1) {
+    form.injuredCount = 1
+  }
 }
 
 /** 地图标记 — 给 MapCard 传递 BD09 坐标（百度地图使用） */
@@ -717,13 +845,18 @@ async function handleSubmit() {
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
+  const hasImage = form.images.some((img) => img.raw)
+  const hasVideo = !!selectedVideo.value?.raw
+  if (!hasImage && !hasVideo) {
+    ElMessage.warning('请至少上传一张照片或一个视频')
+    return
+  }
 
   submitting.value = true
   try {
-    const hasRealFiles = form.images.some((img) => img.raw)
     const payload = {
       images: form.images,
-      video: videoBlob.value ? { raw: videoBlob.value, name: '现场视频.webm' } : null,
+      video: selectedVideo.value ? { raw: selectedVideo.value.raw, name: selectedVideo.value.name } : null,
       location: {
         name: form.locationName || form.locationStr,
         area: form.customLocation || form.locationName,
@@ -733,14 +866,16 @@ async function handleSubmit() {
       },
       description: form.description,
       accidentType: form.accidentType || '',
+      sceneLabels: form.sceneLabels,
       peopleInvolved: form.peopleInvolved || 0,
       injuredCount: form.injuredCount || 0,
+      injuryReported: form.injuryReported,
       injuryEstimate: form.injuryEstimate || '',
       reporter: userStore.nickname,
       reporterId: userStore.userInfo?.id || 0,
       coordinateType: 'WGS84',
     }
-    const res = hasRealFiles ? await publicReportWithAttachments(payload) : await publicReport(payload)
+    const res = (hasImage || hasVideo) ? await publicReportWithAttachments(payload) : await publicReport(payload)
 
     if (res.code === 200) {
       const data = res.data
@@ -756,6 +891,11 @@ async function handleSubmit() {
 
       // 识别结果数据（与原有 result 结构一致）
       result.value = detail
+      aiDetectedType.value = data.aiDetectedType || detail?.sceneLabels?.join(', ') || ''
+      form.sceneLabels = Array.from(new Set([
+        ...form.sceneLabels,
+        ...(detail?.sceneLabels || []),
+      ].filter(Boolean)))
 
       // 公共上报附加元数据
       publicReportMeta.value = {
@@ -789,10 +929,12 @@ function handleReset() {
   form.locationLat = null
   form.locationLng = null
   form.accidentType = ''
+  form.sceneLabels = []
   form.description = ''
   form.peopleInvolved = null
   form.injuredCount = null
   form.injuryEstimate = ''
+  form.injuryReported = false
   aiDetectedType.value = ''
   mapCenter.value = null
   result.value = null
@@ -930,6 +1072,28 @@ function openAdviceDialog() {
   flex-wrap: wrap;
 }
 
+.scene-labels,
+.result-labels :deep(.el-checkbox-group) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.result-labels {
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  background: rgba($border-light, 0.75);
+  border-radius: 8px;
+
+  .label-title {
+    display: block;
+    font-size: 12px;
+    color: $text-secondary;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -982,12 +1146,7 @@ function openAdviceDialog() {
   width: 100%;
 
   .video-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 40px 20px;
+    padding: 26px 20px;
     border: 2px dashed $border;
     border-radius: 14px;
     background: rgba($border-light, 0.4);
@@ -997,6 +1156,28 @@ function openAdviceDialog() {
     &:hover {
       border-color: rgba($accent, 0.3);
       background: rgba($accent, 0.03);
+    }
+
+    .video-choice {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: stretch;
+      gap: 18px;
+      width: 100%;
+    }
+
+    .video-choice-divider {
+      width: 1px;
+      background: $border;
+    }
+
+    .video-choice-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 130px;
     }
 
     .el-icon { color: $text-light; }
@@ -1070,6 +1251,37 @@ function openAdviceDialog() {
     .video-actions {
       display: flex;
       gap: 10px;
+    }
+  }
+}
+
+.scene-recognition-field {
+  width: 100%;
+}
+
+.scene-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: $text-light;
+}
+
+.scene-extra-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .video-recorder {
+    .video-placeholder {
+      .video-choice {
+        grid-template-columns: 1fr;
+      }
+
+      .video-choice-divider {
+        width: 100%;
+        height: 1px;
+      }
     }
   }
 }

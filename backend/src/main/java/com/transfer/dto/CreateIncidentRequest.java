@@ -37,6 +37,9 @@ public record CreateIncidentRequest(
         @Size(max = 80)
         String initialAccidentType,
 
+        @Size(max = 500)
+        String sceneLabels,
+
         @NotBlank
         @Size(max = 1000)
         String description,
@@ -64,6 +67,8 @@ public record CreateIncidentRequest(
 
         @Min(0)
         Integer injuredCount,
+
+        Boolean injuryReported,
 
         @Size(max = 500)
         String injuryEstimate,
