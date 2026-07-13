@@ -16,6 +16,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.data.domain.Page;
@@ -44,6 +45,7 @@ import com.transfer.dto.PredictionStatusResponse;
 import com.transfer.dto.PredictionSubmitResponse;
 import com.transfer.dto.PublicIncidentSubmitResponse;
 import com.transfer.enums.CoordinateType;
+import com.transfer.event.PublicIncidentSubmittedEvent;
 import com.transfer.enums.IncidentStatus;
 import com.transfer.enums.RiskLevel;
 import com.transfer.model.Incident;
@@ -82,6 +84,7 @@ public class IncidentService {
     private final RealtimeService realtimeService;
     private final MapService mapService;
     private final YoloDetectClient yoloDetectClient;
+    private final ApplicationEventPublisher eventPublisher;
     private final Path uploadDir;
     private final boolean autoSubmitPredictionOnPublicReport;
     private final float yoloDefaultConf;
@@ -101,6 +104,7 @@ public class IncidentService {
             RealtimeService realtimeService,
             MapService mapService,
             YoloDetectClient yoloDetectClient,
+            ApplicationEventPublisher eventPublisher,
             @Value("${app.upload-dir:uploads}") String uploadDir,
             @Value("${app.incident.auto-submit-prediction-on-public-report:true}")
             boolean autoSubmitPredictionOnPublicReport,
@@ -120,6 +124,7 @@ public class IncidentService {
         this.realtimeService = realtimeService;
         this.mapService = mapService;
         this.yoloDetectClient = yoloDetectClient;
+        this.eventPublisher = eventPublisher;
         this.autoSubmitPredictionOnPublicReport =
                 autoSubmitPredictionOnPublicReport;
         this.yoloDefaultConf = yoloDefaultConf;
@@ -314,8 +319,10 @@ public class IncidentService {
     }
 
     /**
-     * 普通市民事故上报入口：保存事故、照片/视频，生成即时安全提示，
-     * 并按配置把事故提交给数据预测模块。
+     * 普通市民事故上报入口。
+     *
+     * <p>即时链路：保存事故与附件 -> 同步生成 AI 即时建议 -> 立即返回前端。</p>
+     * <p>后台链路：事务提交后异步执行 YOLOv5 和数据预测模块。</p>
      */
     @Transactional
     public PublicIncidentSubmitResponse publicReport(
@@ -352,61 +359,56 @@ public class IncidentService {
             );
         }
 
-        // ---- 调用 YOLOv5 AI 检测并自动填充事故类型 ----
-        List<IncidentAttachment> allAttachments =
-                attachmentRepository.findByIncidentId(incident.getId());
-        runYoloDetection(incident, allAttachments, photos, videos, video);
-
         /*
-         * 生成即时安全提示（AI）。
-         * 异常时使用保底文案，不阻断事故上报流程。
+         * 保留原有 AI 即时建议逻辑：这里仍然同步调用，
+         * 生成完成后随本次上报响应立即返回给前端。
          */
-        CitizenImmediateAdviceResponse immediateAdvice = null;
-        try {
-            immediateAdvice =
-                    citizenAiService.generateImmediateAdvice(incident);
-        } catch (Exception e) {
-            log.warn(
-                    "生成即时安全提示失败: incidentId={}, error={}",
-                    incident.getId(),
-                    e.getMessage()
-            );
-        }
+        CitizenImmediateAdviceResponse immediateAdvice =
+                citizenAiService.generateImmediateAdvice(incident);
 
-        if (immediateAdvice != null) {
-            incident.setCitizenImmediateAdvice(
-                    immediateAdvice.immediateAdvice()
-            );
-            incident.setCasualtyDetected(
-                    Boolean.TRUE.equals(
-                            immediateAdvice.casualtyDetected()
-                    )
-            );
-        } else {
-            incident.setCitizenImmediateAdvice(
-                    "信息已提交，请先保证自身安全，保持手机畅通。"
-            );
-        }
-        incident = incidentRepository.save(incident);
+        incident.setCitizenImmediateAdvice(
+                immediateAdvice.immediateAdvice()
+        );
+        incident.setCasualtyDetected(
+                Boolean.TRUE.equals(
+                        immediateAdvice.casualtyDetected()
+                )
+        );
 
         /*
          * 提交数据预测模块。
          * 异常时返回 null，不阻断事故上报流程。
          */
         PredictionSubmitResponse predictionSubmit = null;
+
         if (autoSubmitPredictionOnPublicReport) {
-            try {
-                predictionSubmit = submitPredictionRequest(
-                        incident.getId(),
-                        request.reportUserId()
-                );
-            } catch (Exception e) {
-                log.error(
-                        "提交预测请求失败: incidentId={}, error={}",
-                        incident.getId(),
-                        e.getMessage()
-                );
-            }
+            /*
+             * 先标记为已进入预测队列；真正的 YOLO 和预测模块调用
+             * 会在当前事务提交后，由异步监听器执行。
+             */
+            incident.setStatus(
+                    IncidentStatus.PREDICTION_REQUESTED
+            );
+        }
+
+        incident = incidentRepository.save(incident);
+
+        if (autoSubmitPredictionOnPublicReport) {
+            eventPublisher.publishEvent(
+                    new PublicIncidentSubmittedEvent(
+                            incident.getId(),
+                            request.reportUserId()
+                    )
+            );
+
+            predictionSubmit = new PredictionSubmitResponse(
+                    true,
+                    "QUEUED",
+                    "即时建议已生成，事故预测正在后台处理，预计约1分钟完成。",
+                    null,
+                    null,
+                    null
+            );
         }
 
         return new PublicIncidentSubmitResponse(
@@ -629,15 +631,41 @@ public class IncidentService {
     }
 
     /**
-     * 对上传的照片/视频调用 YOLOv5 进行事故检测，
+     * 根据已持久化的附件，在后台执行 YOLOv5 检测。
+     *
+     * <p>异步任务不能继续依赖请求期内的 MultipartFile，
+     * 因此这里按事故 ID 重新读取数据库附件及磁盘文件。</p>
+     */
+    public void runYoloDetectionByIncidentId(Long incidentId) {
+        Incident incident = findIncident(incidentId);
+
+        List<IncidentAttachment> attachments =
+                attachmentRepository
+                        .findByIncidentIdOrderByCreatedAtAsc(
+                                incidentId
+                        );
+
+        if (attachments.isEmpty()) {
+            log.info(
+                    "事故 {} 没有可供 YOLOv5 检测的附件",
+                    incident.getIncidentNo()
+            );
+            return;
+        }
+
+        runYoloDetection(
+                incident,
+                attachments
+        );
+    }
+
+    /**
+     * 对已保存的照片/视频调用 YOLOv5 进行事故检测，
      * 自动提取事故类型（排除 "car"），保存到附件和事故记录。
      */
     private void runYoloDetection(
             Incident incident,
-            List<IncidentAttachment> attachments,
-            List<MultipartFile> photos,
-            List<MultipartFile> videos,
-            MultipartFile singleVideo
+            List<IncidentAttachment> attachments
     ) {
         java.util.Set<String> allAccidentTypes = new java.util.LinkedHashSet<>();
         List<IncidentAttachment> updatedAttachments = new ArrayList<>();
