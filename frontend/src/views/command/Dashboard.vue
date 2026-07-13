@@ -69,6 +69,7 @@
             title="指挥大屏地图"
             :hint="mapMarkers.length + ' 起事故'"
             :markers="mapMarkers"
+            fit-view-once
           />
         </div>
       </el-col>
