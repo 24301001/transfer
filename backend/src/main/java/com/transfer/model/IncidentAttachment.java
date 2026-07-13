@@ -47,6 +47,10 @@ public class IncidentAttachment extends AuditableEntity {
      * YOLOv5 完整检测结果 JSON（含 bbox、confidence 等）。
      */
     @Lob
+    @Column(
+            name = "ai_detection_json",
+            columnDefinition = "LONGTEXT"
+    )
     private String aiDetectionJson;
 
     /**
