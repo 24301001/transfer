@@ -26,32 +26,111 @@ Mock.mock('/api/system/logs', 'get', (options) => {
   return { code: 200, message: 'ok', data: { list: paged, total: list.length } }
 })
 
-// ====== 系统健康状态模拟 ======
-Mock.mock('/api/system/health', 'get', () => {
+// ====== 管理员系统健康详情模拟 ======
+Mock.mock(/\/api\/v1\/admin\/health/, 'get', () => {
   return {
     code: 200,
     message: 'ok',
     data: {
-      overall: 'healthy',
-      services: [
-        { name: 'Web 服务', status: 'healthy', uptime: '15天 6小时', responseTime: '45ms' },
-        { name: '数据库', status: 'healthy', uptime: '30天 12小时', responseTime: '12ms' },
-        { name: '图像识别服务', status: 'healthy', uptime: '7天 3小时', responseTime: '230ms' },
-        { name: 'DeepSeek 大模型', status: 'healthy', uptime: '15天', responseTime: '580ms' },
-        { name: '短信服务', status: 'degraded', uptime: '15天', responseTime: '1200ms' },
-        { name: '百度地图 API', status: 'healthy', uptime: '30天', responseTime: '65ms' },
-        { name: '邮件服务', status: 'healthy', uptime: '30天', responseTime: '320ms' },
-        { name: '缓存服务', status: 'healthy', uptime: '15天', responseTime: '2ms' },
-      ],
-      stats: {
-        totalAccidents: 156,
-        todayAccidents: 7,
-        pendingTasks: 3,
-        activeUsers: 12,
-        cpuUsage: '32%',
-        memoryUsage: '56%',
-        diskUsage: '41%',
+      status: 'UP',
+      statusMessage: '系统运行正常',
+      checkedAt: '2026-07-13T10:30:00',
+      uptimeSeconds: 1234567,
+      uptime: '14天 6小时 56分钟 7秒',
+      application: {
+        name: 'traffic-risk-backend',
+        version: '0.0.1-SNAPSHOT',
+        activeProfiles: ['dev', 'mock'],
+        javaVersion: '17.0.5',
+        springBootVersion: '3.1.0',
+        timezone: 'Asia/Shanghai',
       },
+      server: {
+        hostName: 'dev-server-01',
+        port: 8080,
+        availableProcessors: 8,
+        systemLoadAverage: 1.52,
+        operatingSystem: 'Windows 11 10.0',
+        architecture: 'amd64',
+      },
+      resources: {
+        heapUsedBytes: 268435456,
+        heapCommittedBytes: 536870912,
+        heapMaxBytes: 1073741824,
+        heapUsagePercent: 25.0,
+        nonHeapUsedBytes: 83886080,
+        diskTotalBytes: 500000000000,
+        diskUsableBytes: 300000000000,
+        diskUsagePercent: 40.0,
+        processCpuUsagePercent: 12.5,
+        systemCpuUsagePercent: 45.2,
+      },
+      components: {
+        database: {
+          status: 'UP',
+          configured: true,
+          responseTimeMs: 45,
+          message: '数据库连接正常',
+          details: { product: 'H2', version: '2.2.224', driver: 'H2 JDBC Driver', readOnly: false },
+        },
+        redis: {
+          status: 'UP',
+          configured: true,
+          responseTimeMs: 12,
+          message: 'Redis 连接正常',
+          details: { ping: 'PONG' },
+        },
+        predictionModule: {
+          status: 'UP',
+          configured: true,
+          responseTimeMs: 230,
+          message: '事故预测模块响应正常',
+          details: {},
+        },
+        yoloService: {
+          status: 'NOT_CONFIGURED',
+          configured: false,
+          responseTimeMs: null,
+          message: 'YOLO 服务地址未配置',
+          details: {},
+        },
+        siliconFlowAi: {
+          status: 'UP',
+          configured: true,
+          responseTimeMs: null,
+          message: '硅基流动 AI 已配置（未执行外部连通性探测）',
+          details: { model: 'DeepSeek-V3' },
+        },
+        baiduMap: {
+          status: 'UP',
+          configured: true,
+          responseTimeMs: null,
+          message: '百度地图已配置（未执行外部连通性探测）',
+          details: { serverKeyConfigured: true, browserKeyConfigured: true },
+        },
+        mail: {
+          status: 'UP',
+          configured: true,
+          responseTimeMs: null,
+          message: '邮件服务已配置（未执行外部连通性探测）',
+          details: { host: 'smtp.example.com', account: 'n***@example.com' },
+        },
+      },
+      businessMetrics: {
+        totalUsers: 100,
+        enabledUsers: 95,
+        disabledUsers: 5,
+        totalIncidents: 156,
+        activeIncidents: 12,
+        closedIncidents: 140,
+        totalDispatchTasks: 98,
+        activeDispatchTasks: 4,
+        completedDispatchTasks: 90,
+        totalEmergencyVehicles: 20,
+        availableEmergencyVehicles: 15,
+        outOfServiceEmergencyVehicles: 2,
+      },
+      warnings: [],
     },
   }
 })

@@ -1,19 +1,40 @@
 import request from '../request'
 
 /**
- * 系统健康检查
- * GET /api/health
- * @returns {Promise<{status: string, time: string, dependencies: object}>}
+ * 管理员系统健康详情
+ * GET /api/v1/admin/health
+ * 需要 ADMIN 角色 JWT，建议 20~30 秒刷新一次
+ *
+ * @returns {Promise<{
+ *   status: string,            // UP | DEGRADED | DOWN
+ *   statusMessage: string,     // 中文状态描述
+ *   checkedAt: string,         // ISO 检测时间
+ *   uptimeSeconds: number,
+ *   uptime: string,            // "14天 6小时 56分钟 7秒"
+ *   application: { name, version, activeProfiles, javaVersion, springBootVersion, timezone },
+ *   server: { hostName, port, availableProcessors, systemLoadAverage, operatingSystem, architecture },
+ *   resources: {
+ *     heapUsedBytes, heapCommittedBytes, heapMaxBytes, heapUsagePercent,
+ *     nonHeapUsedBytes,
+ *     diskTotalBytes, diskUsableBytes, diskUsagePercent,
+ *     processCpuUsagePercent, systemCpuUsagePercent
+ *   },
+ *   components: Record<string, { status, configured, responseTimeMs, message, details }>,
+ *   businessMetrics: {
+ *     totalUsers, enabledUsers, disabledUsers,
+ *     totalIncidents, activeIncidents, closedIncidents,
+ *     totalDispatchTasks, activeDispatchTasks, completedDispatchTasks,
+ *     totalEmergencyVehicles, availableEmergencyVehicles, outOfServiceEmergencyVehicles
+ *   },
+ *   warnings: string[]
+ * }>}
  */
 export async function getSystemHealth() {
-  const res = await request.get('/health')
+  const res = await request.get('/v1/admin/health')
+  // 后端直接返回 AdminHealthResponse 记录体，包装为统一格式
   return {
     code: 200,
-    data: {
-      status: res.data.status,
-      time: res.data.time,
-      dependencies: res.data.dependencies || {},
-    },
+    data: res.data,
   }
 }
 

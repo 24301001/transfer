@@ -165,7 +165,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request, String fingerprintHash) {
         String username = normalizeRequired(request.username(), "username");
 
         UserAccount user = userAccountRepository.findByUsername(username)
@@ -178,7 +178,16 @@ public class AuthService {
             throw new UnauthorizedException("Invalid username or password");
         }
 
-        validateUserCanUseEmailCode(user);
+        // 滑块验证码校验
+        String sliderToken = request.sliderToken();
+        if (sliderToken != null && !sliderToken.isBlank()) {
+            sliderCaptchaService.consumeVerificationToken(sliderToken, fingerprintHash);
+        } else {
+            // 开发模式下无 sliderToken 也能登录（方便调试）
+            // 生产环境应改为必填
+        }
+
+        // 邮箱验证码（可选）
         String emailCode = request.emailCode();
         if (emailCode != null && !emailCode.isBlank()) {
             verificationCodeService.validateEmailCode(
@@ -187,7 +196,6 @@ public class AuthService {
                     emailCode
             );
         }
-        // 无 emailCode 时跳过验证码校验（开发模式）
 
         return buildLoginResponse(user);
     }
