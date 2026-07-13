@@ -76,7 +76,10 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest servletRequest
     ) {
-        return authService.login(request, clientFingerprintService.fingerprint(servletRequest));
+        return authService.login(
+                request,
+                clientFingerprintService.fingerprint(servletRequest)
+        );
     }
 
     @PostMapping("/password/reset")
