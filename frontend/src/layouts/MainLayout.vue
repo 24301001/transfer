@@ -1,7 +1,7 @@
 <template>
-  <div class="main-layout">
+  <div class="main-layout" :class="{ 'is-immersive': isImmersive }">
     <!-- 顶部导航 -->
-    <header class="top-header" id="mainHeader">
+    <header v-if="!isImmersive" class="top-header" id="mainHeader">
       <div class="header-inner">
         <div class="header-left">
           <div class="logo">
@@ -57,7 +57,7 @@
     </header>
 
     <!-- 内容区域 -->
-    <main class="main-content">
+    <main class="main-content" :class="{ 'is-immersive': isImmersive }">
       <router-view />
     </main>
 
@@ -95,11 +95,8 @@ const menuConfig = {
   [ROLES.POLICE.key]: [
     { path: '/police/report', label: '事故上报', icon: EditPen },
   ],
-  [ROLES.COMMAND.key]: [
-    { path: '/command/dashboard', label: '指挥大屏', icon: Monitor },
-    { path: '/command/dispatch', label: '调度处理', icon: Van },
-    { path: '/command/accident-query', label: '事故查询', icon: Search },
-  ],
+  // 指挥人员进入沉浸式大屏，不再显示顶部功能 Tab
+  [ROLES.COMMAND.key]: [],
   [ROLES.RESCUE.key]: [
     { path: '/rescue/tasks', label: '清障任务', icon: Tickets },
   ],
@@ -113,6 +110,7 @@ const menuConfig = {
 const menuItems = computed(() => menuConfig[userStore.role] || [])
 
 const activeMenu = computed(() => route.path)
+const isImmersive = computed(() => Boolean(route.meta.immersive))
 
 const showFloatingBall = computed(() => userStore.role === ROLES.POLICE.key)
 
@@ -159,6 +157,14 @@ function handleCommand(command) {
   flex-direction: column;
   min-height: 100vh;
   background: $bg;
+
+  &.is-immersive {
+    width: 100vw;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    background: #020812;
+  }
 }
 
 .top-header {
@@ -311,5 +317,15 @@ function handleCommand(command) {
   max-width: 1440px;
   width: 100%;
   margin: 0 auto;
+
+  &.is-immersive {
+    width: 100vw;
+    height: 100vh;
+    min-height: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 }
 </style>

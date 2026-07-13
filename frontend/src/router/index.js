@@ -39,7 +39,7 @@ const routes = [
         path: 'command/dashboard',
         name: 'CommandDashboard',
         component: () => import('@/views/command/Dashboard.vue'),
-        meta: { title: '指挥大屏', roles: [ROLES.COMMAND.key] },
+        meta: { title: '交通事故风险预估与指挥中心', roles: [ROLES.COMMAND.key], immersive: true },
       },
       {
         path: 'command/accident/:id',
@@ -47,17 +47,14 @@ const routes = [
         component: () => import('@/views/command/AccidentDetail.vue'),
         meta: { title: '事故详情', roles: [ROLES.COMMAND.key, ROLES.RESCUE.key] },
       },
+      // 旧入口统一回到指挥中心，事故查询与调度历史已集成到大屏
       {
         path: 'command/dispatch',
-        name: 'DispatchTask',
-        component: () => import('@/views/command/DispatchTask.vue'),
-        meta: { title: '调度处理', roles: [ROLES.COMMAND.key] },
+        redirect: '/command/dashboard',
       },
       {
         path: 'command/accident-query',
-        name: 'AccidentQuery',
-        component: () => import('@/views/command/AccidentQuery.vue'),
-        meta: { title: '事故查询', roles: [ROLES.COMMAND.key] },
+        redirect: '/command/dashboard',
       },
       // ====== 清障救援 ======
       {

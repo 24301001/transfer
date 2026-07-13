@@ -1,68 +1,69 @@
 <template>
-  <div class="dashboard-page">
-    <!-- 顶部概览卡片 -->
-    <el-row :gutter="16" class="stat-cards">
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-inner">
-            <div class="stat-icon" style="background: rgba(59,130,246,0.10);">
-              <el-icon :size="24" color="#3b82f6"><WarningFilled /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-num">{{ stats.today }}</span>
-              <span class="stat-label">今日事故</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-inner">
-            <div class="stat-icon" style="background: rgba(239,68,68,0.10);">
-              <el-icon :size="24" color="#ef4444"><CircleCloseFilled /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-num">{{ stats.highRisk }}</span>
-              <span class="stat-label">高风险事故</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-inner">
-            <div class="stat-icon" style="background: rgba(245,158,11,0.10);">
-              <el-icon :size="24" color="#f59e0b"><Clock /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-num">{{ stats.pending }}</span>
-              <span class="stat-label">待处理</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <div class="stat-inner">
-            <div class="stat-icon" style="background: rgba(16,185,129,0.10);">
-              <el-icon :size="24" color="#10b981"><CircleCheckFilled /></el-icon>
-            </div>
-            <div class="stat-info">
-              <span class="stat-num">{{ stats.resolved }}</span>
-              <span class="stat-label">已处理</span>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+  <div class="command-center-page">
+    <!-- 全屏地图背景 -->
+    <div class="map-stage">
+      <MapCard
+        ref="mapRef"
+        class="command-map"
+        height="100%"
+        width="100%"
+        title="交通事故态势地图"
+        :markers="mapMarkers"
+        :show-hint="false"
+        :show-zoom-controls="false"
+        :show-native-controls="false"
+        :show-marker-labels="false"
+        fit-view-once
+      />
+    </div>
+    <div class="map-vignette"></div>
+    <div class="map-grid-overlay"></div>
 
-    <!-- 地图（占满宽度） -->
-    <el-row :gutter="16" class="main-section">
-      <el-col :span="24" style="display:flex; flex-direction:column;">
-        <div class="page-card map-card">
-          <div class="card-header">
-            <h3>事故分布地图</h3>
-            <el-tag size="small" type="info">{{ accidentStore.accidentList.length }} 起事故</el-tag>
+    <!-- 顶部标题区 -->
+    <header class="command-header">
+      <div class="header-corner header-time">
+        <div class="time-value">{{ currentTime }}</div>
+        <div class="date-value">{{ currentDate }} · {{ currentWeekday }}</div>
+      </div>
+
+      <div class="center-title">
+        <span class="title-line"></span>
+        <div class="title-copy">
+          <h1>交通事故风险预估与指挥中心</h1>
+          <p>TRAFFIC ACCIDENT RISK FORECAST &amp; COMMAND CENTER</p>
+        </div>
+        <span class="title-line is-right"></span>
+      </div>
+
+      <div class="header-corner header-user">
+        <el-dropdown trigger="click" popper-class="command-user-popper" @command="handleUserCommand">
+          <button class="user-console" type="button">
+            <el-avatar :size="30" :icon="UserFilled" />
+            <span class="user-name">{{ userStore.nickname || '指挥人员' }}</span>
+            <span class="user-role">{{ userStore.roleLabel }}</span>
+            <el-icon><ArrowDown /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="profile">
+                <el-icon><User /></el-icon>个人中心
+              </el-dropdown-item>
+              <el-dropdown-item divided command="logout">
+                <el-icon><SwitchButton /></el-icon>退出登录
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+    </header>
+
+    <!-- 左侧图表悬浮栏 -->
+    <aside class="side-rail left-rail" :class="{ 'is-collapsed': leftCollapsed }">
+      <section class="hud-panel chart-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>事故类型分布</h2>
+            <p>ACCIDENT TYPE DISTRIBUTION</p>
           </div>
           <MapCard
             height="100%"
@@ -71,17 +72,229 @@
             :markers="mapMarkers"
           />
         </div>
-      </el-col>
-    </el-row>
+      </section>
 
-    <!-- 事故详情侧边栏 -->
+      <section class="hud-panel chart-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>处理阶段分布</h2>
+            <p>PROCESSING STAGE DISTRIBUTION</p>
+          </div>
+          <span class="panel-total">全部数据</span>
+        </div>
+        <div class="chart-body">
+          <CommandSemiGauge
+            :data="statusChartData"
+            :selected-name="activeChartFilter.dimension === 'status' ? activeChartFilter.value : ''"
+            total-label="流程总量"
+            @select="(name) => handleChartSelect('status', name)"
+          />
+        </div>
+      </section>
+    </aside>
+
+    <button
+      class="rail-toggle left-toggle"
+      :class="{ 'is-collapsed': leftCollapsed }"
+      type="button"
+      :title="leftCollapsed ? '展开数据图表' : '收起数据图表'"
+      @click="leftCollapsed = !leftCollapsed"
+    >
+      <el-icon><DArrowRight v-if="leftCollapsed" /><DArrowLeft v-else /></el-icon>
+    </button>
+
+    <!-- 右侧查询与调度历史悬浮栏 -->
+    <aside class="side-rail right-rail" :class="{ 'is-collapsed': rightCollapsed }">
+      <section class="hud-panel incident-panel">
+        <div class="panel-heading compact-heading">
+          <div>
+            <h2>事故查询</h2>
+            <p>INCIDENT SEARCH</p>
+          </div>
+          <div class="heading-actions">
+            <span v-if="queryActiveCount" class="filter-count">{{ queryActiveCount }} 项筛选</span>
+            <button class="icon-action" type="button" title="刷新数据" @click="refreshAll">
+              <el-icon :class="{ 'is-loading': refreshing }"><Refresh /></el-icon>
+            </button>
+          </div>
+        </div>
+
+        <div class="query-controls">
+          <div class="quick-search-row">
+            <el-input
+              v-model="draftFilters.keyword"
+              size="small"
+              clearable
+              placeholder="搜索编号、地点、描述…"
+              @keyup.enter="applyIncidentFilters"
+            >
+              <template #prefix><el-icon><Search /></el-icon></template>
+            </el-input>
+            <el-button class="query-button" type="primary" size="small" @click="applyIncidentFilters">
+              查询
+            </el-button>
+            <button class="advanced-button" type="button" @click="advancedVisible = !advancedVisible">
+              <el-icon><Filter /></el-icon>
+              <span>高级</span>
+              <el-icon class="advanced-arrow" :class="{ 'is-open': advancedVisible }"><ArrowDown /></el-icon>
+            </button>
+          </div>
+
+          <el-collapse-transition>
+            <div v-show="advancedVisible" class="advanced-filters">
+              <el-input v-model="draftFilters.caseNo" size="small" clearable placeholder="事故编号" />
+              <el-select v-model="draftFilters.status" size="small" clearable placeholder="处理状态">
+                <el-option label="待处理" value="待处理" />
+                <el-option label="处理中" value="处理中" />
+                <el-option label="已处理" value="已处理" />
+                <el-option label="已结案" value="已结案" />
+              </el-select>
+              <el-select v-model="draftFilters.riskLevel" size="small" clearable placeholder="风险等级">
+                <el-option label="低" value="低" />
+                <el-option label="中" value="中" />
+                <el-option label="高" value="高" />
+                <el-option label="严重" value="严重" />
+              </el-select>
+              <el-select v-model="draftFilters.type" size="small" clearable filterable placeholder="事故类型">
+                <el-option v-for="type in accidentTypeOptions" :key="type" :label="type" :value="type" />
+              </el-select>
+              <el-date-picker
+                v-model="draftFilters.dateRange"
+                class="date-range-filter"
+                type="daterange"
+                size="small"
+                unlink-panels
+                clearable
+                start-placeholder="开始日期"
+                end-placeholder="结束日期"
+                range-separator="至"
+                popper-class="command-date-popper"
+              />
+              <div class="advanced-actions">
+                <button type="button" class="text-action" @click="resetIncidentFilters">重置条件</button>
+                <button type="button" class="text-action is-primary" @click="applyIncidentFilters">应用筛选</button>
+              </div>
+            </div>
+          </el-collapse-transition>
+
+          <div class="result-summary">
+            <span>
+              匹配 <strong>{{ filteredAccidents.length }}</strong> / {{ allAccidents.length }} 起事故
+            </span>
+            <span v-if="activeChartFilter.value" class="linked-filter">
+              图表联动：{{ activeChartFilter.value }}
+            </span>
+          </div>
+        </div>
+
+        <div class="incident-list hud-scroll" v-loading="accidentStore.loading">
+          <article
+            v-for="item in filteredAccidents"
+            :key="item.id"
+            class="incident-row"
+            :class="{ 'is-active': selectedAccidentId === item.id && drawerMode === 'accident' }"
+            @click="openAccident(item)"
+          >
+            <div class="row-main">
+              <div class="row-topline">
+                <span class="case-number">{{ item.caseNo || `#${item.id}` }}</span>
+                <RiskBadge :level="item.riskLevel" size="small" />
+              </div>
+              <div class="row-title">{{ item.type || '未识别事故' }}</div>
+              <div class="row-location">
+                <el-icon><Location /></el-icon>
+                <span>{{ item.location?.name || '地点信息待补充' }}</span>
+              </div>
+            </div>
+            <div class="row-meta">
+              <span class="status-chip" :class="statusClass(item.status)">{{ item.status || '-' }}</span>
+              <time>{{ compactDateTime(item.reportTime) }}</time>
+            </div>
+          </article>
+          <div v-if="!filteredAccidents.length && !accidentStore.loading" class="empty-state">
+            <el-icon><Search /></el-icon>
+            <span>暂无符合条件的事故记录</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="hud-panel dispatch-panel">
+        <div class="panel-heading compact-heading">
+          <div>
+            <h2>调度任务历史</h2>
+            <p>DISPATCH TASK HISTORY</p>
+          </div>
+          <span class="panel-total">{{ filteredTasks.length }} 条</span>
+        </div>
+
+        <div class="dispatch-list hud-scroll" v-loading="taskLoading">
+          <article
+            v-for="task in filteredTasks"
+            :key="task.id"
+            class="dispatch-row"
+            :class="{ 'is-active': selectedTask?.id === task.id && drawerMode === 'task' }"
+            @click="openTask(task)"
+          >
+            <div class="dispatch-icon"><el-icon><Van /></el-icon></div>
+            <div class="dispatch-copy">
+              <div class="dispatch-topline">
+                <span>{{ task.taskNo || `任务 #${task.id}` }}</span>
+                <span class="task-status" :class="taskStatusClass(task.status)">{{ task.status }}</span>
+              </div>
+              <div class="dispatch-title">
+                {{ task.accidentType || relatedAccident(task)?.type || '关联事故' }}
+                <span>· {{ task.vehicleType || '-' }}</span>
+              </div>
+              <div class="dispatch-meta">
+                <span>{{ task.assignedTo || '待分配人员' }}</span>
+                <time>{{ compactDateTime(task.createTime) }}</time>
+              </div>
+            </div>
+            <el-icon class="locate-arrow"><Aim /></el-icon>
+          </article>
+          <div v-if="!filteredTasks.length && !taskLoading" class="empty-state compact-empty">
+            <el-icon><Van /></el-icon>
+            <span>暂无调度历史</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <button
+      class="rail-toggle right-toggle"
+      :class="{ 'is-collapsed': rightCollapsed }"
+      type="button"
+      :title="rightCollapsed ? '展开查询面板' : '收起查询面板'"
+      @click="rightCollapsed = !rightCollapsed"
+    >
+      <el-icon><DArrowLeft v-if="rightCollapsed" /><DArrowRight v-else /></el-icon>
+    </button>
+
+    <!-- 地图底部运行状态 -->
+    <div class="map-status-strip">
+      <span><i class="online-dot"></i>实时数据同步</span>
+      <span>地图事故 <strong>{{ filteredAccidents.length }}</strong></span>
+      <span>调度任务 <strong>{{ filteredTasks.length }}</strong></span>
+      <span>更新于 {{ lastUpdatedTime || '--:--:--' }}</span>
+    </div>
+
+    <!-- 事故 / 调度统一详情抽屉 -->
     <el-drawer
       v-model="drawerVisible"
-      title="事故详情"
-      :size="420"
+      class="command-detail-drawer"
+      :title="drawerMode === 'task' ? '调度任务详情' : '事故详情'"
+      :size="460"
       direction="rtl"
+      modal-class="command-drawer-modal"
     >
-      <template v-if="selectedAccident">
+      <template v-if="drawerMode === 'task' && selectedTask">
+        <div class="drawer-hero">
+          <div>
+            <span class="drawer-eyebrow">DISPATCH TASK</span>
+            <h3>{{ selectedTask.taskNo || `调度任务 #${selectedTask.id}` }}</h3>
+          </div>
+          <span class="drawer-status" :class="taskStatusClass(selectedTask.status)">{{ selectedTask.status }}</span>
+        </div>
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="事故编号">{{ selectedAccident.caseNo }}</el-descriptions-item>
           <el-descriptions-item label="事故类型">{{ selectedAccident.type }}</el-descriptions-item>
@@ -180,42 +393,78 @@
           <p class="text-muted" style="text-align:center;padding:8px;">加载处置反馈...</p>
         </div>
       </template>
+
+      <template v-else-if="drawerAccident">
+        <div class="drawer-hero">
+          <div>
+            <span class="drawer-eyebrow">INCIDENT DETAIL</span>
+            <h3>{{ drawerAccident.caseNo || `事故 #${drawerAccident.id}` }}</h3>
+          </div>
+          <RiskBadge :level="drawerAccident.riskLevel" />
+        </div>
+
+        <div v-if="drawerDetailLoading" class="drawer-loading">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          <span>正在加载完整事故信息…</span>
+        </div>
+
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="事故类型">{{ drawerAccident.type }}</el-descriptions-item>
+          <el-descriptions-item label="风险评分">{{ drawerAccident.riskScore }}</el-descriptions-item>
+          <el-descriptions-item label="处理状态">
+            <span class="status-chip" :class="statusClass(drawerAccident.status)">{{ drawerAccident.status }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="事故地点">{{ drawerAccident.location?.name || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="上报时间">{{ drawerAccident.reportTime }}</el-descriptions-item>
+          <el-descriptions-item label="预计拥堵">{{ drawerAccident.congestionDuration }}</el-descriptions-item>
+          <el-descriptions-item label="恢复时间">{{ drawerAccident.recoveryTime }}</el-descriptions-item>
+          <el-descriptions-item label="影响车道">{{ drawerAccident.affectedLanes }}</el-descriptions-item>
+          <el-descriptions-item label="天气 / 道路">{{ drawerAccident.weather }} / {{ drawerAccident.roadLevel }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div v-if="drawerAccident.description" class="drawer-section">
+          <h4>事故描述</h4>
+          <p>{{ drawerAccident.description }}</p>
+        </div>
+        <div v-if="drawerAccident.disposalAdvice" class="drawer-section is-advice">
+          <h4>智能处置建议</h4>
+          <p>{{ drawerAccident.disposalAdvice }}</p>
+        </div>
+        <div v-if="drawerAccident.dispatchFeedback" class="drawer-section is-feedback">
+          <h4>处置反馈</h4>
+          <p>{{ drawerAccident.dispatchFeedback }}</p>
+        </div>
+      </template>
+
       <template #footer>
-        <div style="display:flex; gap:12px;">
+        <div class="drawer-footer-actions">
           <el-button @click="drawerVisible = false">关闭</el-button>
-          <el-button type="primary" @click="goToDetail(selectedAccident?.id)">查看详情</el-button>
-          <el-button type="success" @click="openDispatchDialog">
+          <el-button
+            v-if="drawerMode === 'accident' && drawerAccident && !['已处理', '已结案'].includes(drawerAccident.status)"
+            type="success"
+            @click="openDispatchDialog"
+          >
             分配清障人员
           </el-button>
         </div>
       </template>
     </el-drawer>
 
-    <!-- 分配清障人员对话框 -->
+    <!-- 地图事故抽屉内创建调度任务 -->
     <el-dialog
       v-model="dispatchDialogVisible"
+      class="command-dispatch-dialog"
       title="分配清障任务"
       width="520px"
       :close-on-click-modal="false"
     >
-      <el-form
-        ref="formRef"
-        :model="dispatchForm"
-        :rules="dispatchFormRules"
-        label-width="100px"
-        label-position="top"
-      >
+      <el-form ref="formRef" :model="dispatchForm" :rules="dispatchFormRules" label-position="top">
         <el-form-item label="关联事故">
-          <el-input :model-value="selectedAccident?.caseNo || ''" disabled />
+          <el-input :model-value="drawerAccident?.caseNo || ''" disabled />
         </el-form-item>
         <el-form-item label="调度人员" prop="assignedTo">
           <el-select v-model="dispatchForm.assignedTo" placeholder="选择清障/救援人员" filterable style="width:100%">
-            <el-option
-              v-for="u in rescueUsers"
-              :key="u.id"
-              :label="u.nickname"
-              :value="u.nickname"
-            />
+            <el-option v-for="user in rescueUsers" :key="user.id" :label="user.nickname" :value="user.nickname" />
           </el-select>
         </el-form-item>
         <el-form-item label="车辆类型" prop="vehicleType">
@@ -227,108 +476,342 @@
           </el-select>
         </el-form-item>
         <el-form-item label="备注说明">
-          <el-input v-model="dispatchForm.notes" type="textarea" :rows="3" placeholder="备注信息，如注意事项、特殊要求等" />
-        </el-form-item>
-        <el-form-item label="分配人">
-          <el-input value="李指挥" disabled />
+          <el-input v-model="dispatchForm.notes" type="textarea" :rows="3" placeholder="填写现场注意事项或特殊要求" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dispatchDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="submitDispatch">
-          确认分配
-        </el-button>
+        <el-button type="primary" :loading="creating" @click="submitDispatch">确认分配</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAccidentStore } from '@/stores/accident'
+import { useDispatchStore } from '@/stores/dispatch'
+import { useUserStore } from '@/stores/user'
 import { getAccidentList, getAccidentDetail } from '@/services/modules/accident'
-import { createDispatch } from '@/services/modules/dispatch'
+import { getDispatchList, createDispatch } from '@/services/modules/dispatch'
 import { wgs84ToBd09 } from '@/utils/location'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import MapCard from '@/components/MapCard.vue'
 import RiskBadge from '@/components/RiskBadge.vue'
+import CommandSemiGauge from '@/components/CommandSemiGauge.vue'
 import {
-  WarningFilled, CircleCloseFilled, CircleCheckFilled,
-  Clock,
+  Aim,
+  ArrowDown,
+  DArrowLeft,
+  DArrowRight,
+  Filter,
+  Loading,
+  Location,
+  Refresh,
+  Search,
+  SwitchButton,
+  User,
+  UserFilled,
+  Van,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const accidentStore = useAccidentStore()
+const dispatchStore = useDispatchStore()
+const userStore = useUserStore()
 
-// ====== 统计数据 ======
-const stats = computed(() => {
-  const list = accidentStore.accidentList
-  const today = list.filter((a) => {
-    const d = new Date(a.reportTime)
-    const now = new Date()
-    return d.toDateString() === now.toDateString()
-  }).length
-  const highRisk = list.filter((a) => a.riskLevel === '高' || a.riskLevel === '严重').length
-  const pending = list.filter((a) => a.status === '待处理' || a.status === '处理中').length
-  const resolved = list.filter((a) => a.status === '已处理' || a.status === '已结案').length
-  return { today, highRisk, pending, resolved }
+const mapRef = ref(null)
+const leftCollapsed = ref(false)
+const rightCollapsed = ref(false)
+const advancedVisible = ref(false)
+const refreshing = ref(false)
+const taskLoading = ref(false)
+const lastUpdatedTime = ref('')
+
+// ====== 顶部时间 ======
+const now = ref(new Date())
+let clockTimer = null
+const currentTime = computed(() => now.value.toLocaleTimeString('zh-CN', { hour12: false }))
+const currentDate = computed(() => now.value.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }))
+const currentWeekday = computed(() => now.value.toLocaleDateString('zh-CN', { weekday: 'long' }))
+
+// ====== 全量数据 ======
+const allAccidents = computed(() => accidentStore.accidentList || [])
+const taskList = ref([])
+const accidentById = computed(() => new Map(allAccidents.value.map((item) => [Number(item.id), item])))
+
+function relatedAccident(task) {
+  if (!task?.accidentId) return null
+  return accidentById.value.get(Number(task.accidentId)) || null
+}
+
+async function fetchAllAccidents() {
+  if (accidentStore.loading) return
+  accidentStore.loading = true
+  try {
+    const pageSize = 200
+    let page = 1
+    let total = Infinity
+    const records = []
+    while (records.length < total && page <= 10) {
+      const res = await getAccidentList({ page, pageSize })
+      if (res.code !== 200) break
+      const batch = res.data?.list || []
+      total = Number(res.data?.total ?? batch.length)
+      records.push(...batch)
+      if (!batch.length || batch.length < pageSize) break
+      page += 1
+    }
+    accidentStore.setAccidents(records)
+  } catch (error) {
+    ElMessage.error('事故数据加载失败：' + (error.message || '未知错误'))
+  } finally {
+    accidentStore.loading = false
+  }
+}
+
+async function fetchAllTasks() {
+  if (taskLoading.value) return
+  taskLoading.value = true
+  try {
+    const pageSize = 200
+    let page = 1
+    let total = Infinity
+    const records = []
+    while (records.length < total && page <= 10) {
+      const res = await getDispatchList({ page, pageSize })
+      if (res.code !== 200) break
+      const batch = res.data?.list || []
+      total = Number(res.data?.total ?? batch.length)
+      records.push(...batch)
+      if (!batch.length || batch.length < pageSize) break
+      page += 1
+    }
+    taskList.value = records
+    dispatchStore.setTasks(records)
+  } catch (error) {
+    ElMessage.error('调度历史加载失败：' + (error.message || '未知错误'))
+  } finally {
+    taskLoading.value = false
+  }
+}
+
+async function refreshAll() {
+  if (refreshing.value) return
+  refreshing.value = true
+  await Promise.all([fetchAllAccidents(), fetchAllTasks()])
+  lastUpdatedTime.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  refreshing.value = false
+}
+
+// ====== 图表与联动 ======
+const activeChartFilter = reactive({ dimension: '', value: '' })
+
+function countBy(list, field) {
+  const result = new Map()
+  list.forEach((item) => {
+    const value = item?.[field] || '其他'
+    result.set(value, (result.get(value) || 0) + 1)
+  })
+  return Array.from(result.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+}
+
+const typeChartSource = computed(() => {
+  if (activeChartFilter.dimension === 'status' && activeChartFilter.value) {
+    return allAccidents.value.filter((item) => item.status === activeChartFilter.value)
+  }
+  return allAccidents.value
 })
 
-// ====== 地图标记 ======
+const statusChartSource = computed(() => {
+  if (activeChartFilter.dimension === 'type' && activeChartFilter.value) {
+    return allAccidents.value.filter((item) => item.type === activeChartFilter.value)
+  }
+  return allAccidents.value
+})
+
+const typeChartData = computed(() => countBy(typeChartSource.value, 'type'))
+const statusChartData = computed(() => countBy(statusChartSource.value, 'status'))
+const accidentTypeOptions = computed(() => Array.from(new Set(allAccidents.value.map((item) => item.type).filter(Boolean))).sort())
+
+function handleChartSelect(dimension, value) {
+  if (activeChartFilter.dimension === dimension && activeChartFilter.value === value) {
+    activeChartFilter.dimension = ''
+    activeChartFilter.value = ''
+    return
+  }
+  activeChartFilter.dimension = dimension
+  activeChartFilter.value = value
+}
+
+function matchesChartFilter(accident) {
+  if (!activeChartFilter.value) return true
+  return activeChartFilter.dimension === 'type'
+    ? accident.type === activeChartFilter.value
+    : accident.status === activeChartFilter.value
+}
+
+// ====== 事故查询 ======
+const emptyFilters = () => ({ keyword: '', caseNo: '', status: '', riskLevel: '', type: '', dateRange: null })
+const draftFilters = reactive(emptyFilters())
+const appliedFilters = reactive(emptyFilters())
+
+function applyIncidentFilters() {
+  Object.assign(appliedFilters, {
+    ...draftFilters,
+    dateRange: draftFilters.dateRange ? [...draftFilters.dateRange] : null,
+  })
+}
+
+function resetIncidentFilters() {
+  Object.assign(draftFilters, emptyFilters())
+  Object.assign(appliedFilters, emptyFilters())
+}
+
+const queryActiveCount = computed(() => {
+  return ['keyword', 'caseNo', 'status', 'riskLevel', 'type'].filter((key) => Boolean(appliedFilters[key])).length
+    + (appliedFilters.dateRange?.length === 2 ? 1 : 0)
+})
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function matchesAppliedFilters(item) {
+  const keyword = normalizeText(appliedFilters.keyword)
+  if (keyword) {
+    const haystack = [item.caseNo, item.type, item.description, item.location?.name, item.location?.road, item.location?.area]
+      .map(normalizeText)
+      .join(' ')
+    if (!haystack.includes(keyword)) return false
+  }
+  if (appliedFilters.caseNo && !normalizeText(item.caseNo).includes(normalizeText(appliedFilters.caseNo))) return false
+  if (appliedFilters.status && item.status !== appliedFilters.status) return false
+  if (appliedFilters.riskLevel && item.riskLevel !== appliedFilters.riskLevel) return false
+  if (appliedFilters.type && item.type !== appliedFilters.type) return false
+  if (appliedFilters.dateRange?.length === 2) {
+    const report = new Date(item.reportTime).getTime()
+    const start = new Date(appliedFilters.dateRange[0]).setHours(0, 0, 0, 0)
+    const end = new Date(appliedFilters.dateRange[1]).setHours(23, 59, 59, 999)
+    if (!Number.isFinite(report) || report < start || report > end) return false
+  }
+  return true
+}
+
+function sortByTimeDesc(list, field) {
+  return [...list].sort((a, b) => {
+    const left = new Date(a?.[field] || 0).getTime() || 0
+    const right = new Date(b?.[field] || 0).getTime() || 0
+    return right - left
+  })
+}
+
+const filteredAccidents = computed(() => sortByTimeDesc(
+  allAccidents.value.filter(matchesChartFilter).filter(matchesAppliedFilters),
+  'reportTime'
+))
+
+const filteredTasks = computed(() => {
+  let list = taskList.value
+  if (activeChartFilter.value) {
+    list = list.filter((task) => {
+      const accident = relatedAccident(task)
+      if (activeChartFilter.dimension === 'type') {
+        return (task.accidentType || accident?.type) === activeChartFilter.value
+      }
+      return accident?.status === activeChartFilter.value
+    })
+  }
+  return sortByTimeDesc(list, 'createTime')
+})
+
+// ====== 地图标记与主动定位 ======
 const mapMarkers = computed(() =>
-  accidentStore.accidentList
-    .filter((a) => a.location?.lng && a.location?.lat)
-    .slice(0, 50)
-    .map((a) => {
-      const bd09 = wgs84ToBd09(a.location.lng, a.location.lat)
+  filteredAccidents.value
+    .filter((item) => Number(item.location?.lng) && Number(item.location?.lat))
+    .slice(0, 100)
+    .map((item) => {
+      const point = wgs84ToBd09(Number(item.location.lng), Number(item.location.lat))
       return {
-        lng: bd09.lng,
-        lat: bd09.lat,
-        label: a.type,
-        onClick: () => openDrawer(a.id),
+        lng: point.lng,
+        lat: point.lat,
+        label: item.caseNo || item.type,
+        onClick: () => openAccident(item),
       }
     })
 )
 
-// ====== Marker 点击 → 抽屉 ======
-const selectedAccidentId = ref(null)
+function focusAccidentOnMap(accident) {
+  if (!accident?.location?.lng || !accident?.location?.lat) return
+  const point = wgs84ToBd09(Number(accident.location.lng), Number(accident.location.lat))
+  nextTick(() => mapRef.value?.focusPoint(point.lng, point.lat, 17))
+}
+
+function focusTaskOnMap(task) {
+  const accident = relatedAccident(task)
+  if (accident) {
+    focusAccidentOnMap(accident)
+    return
+  }
+  if (task?.location?.lng && task?.location?.lat) {
+    const point = wgs84ToBd09(Number(task.location.lng), Number(task.location.lat))
+    nextTick(() => mapRef.value?.focusPoint(point.lng, point.lat, 17))
+  }
+}
+
+// ====== 统一详情抽屉 ======
 const drawerVisible = ref(false)
+const drawerMode = ref('accident')
+const selectedAccidentId = ref(null)
+const selectedTask = ref(null)
 const drawerDetail = ref(null)
 const drawerDetailLoading = ref(false)
 
-const selectedAccident = computed(() => {
-  if (!selectedAccidentId.value) return null
-  return accidentStore.accidentList.find((a) => a.id === selectedAccidentId.value) || null
-})
+const selectedAccident = computed(() => accidentById.value.get(Number(selectedAccidentId.value)) || null)
+const drawerAccident = computed(() => drawerDetail.value || selectedAccident.value)
 
-async function openDrawer(accidentId) {
-  selectedAccidentId.value = accidentId
-  drawerVisible.value = true
-  // 获取完整详情（含调度反馈）
+async function loadAccidentDetail(id) {
   drawerDetailLoading.value = true
   drawerDetail.value = null
   try {
-    const res = await getAccidentDetail(accidentId)
-    if (res.code === 200) {
-      drawerDetail.value = res.data
-    }
+    const res = await getAccidentDetail(id)
+    if (res.code === 200) drawerDetail.value = res.data
   } catch {
-    // 静默失败，drawer 仍显示列表数据
+    // 列表数据仍可用于抽屉展示
   } finally {
     drawerDetailLoading.value = false
   }
 }
 
-// ====== 分配清障对话框 ======
+function openAccident(accident) {
+  if (!accident) return
+  drawerMode.value = 'accident'
+  selectedTask.value = null
+  selectedAccidentId.value = accident.id
+  drawerVisible.value = true
+  focusAccidentOnMap(accident)
+  loadAccidentDetail(accident.id)
+}
+
+function openTask(task) {
+  if (!task) return
+  drawerMode.value = 'task'
+  selectedTask.value = task
+  const accident = relatedAccident(task)
+  selectedAccidentId.value = accident?.id || task.accidentId || null
+  drawerVisible.value = true
+  drawerDetail.value = null
+  focusTaskOnMap(task)
+}
+
+// ====== 抽屉内分配清障任务 ======
 const dispatchDialogVisible = ref(false)
 const creating = ref(false)
 const formRef = ref(null)
-const dispatchForm = ref({
-  assignedTo: '',
-  vehicleType: '',
-  notes: '',
-})
+const dispatchForm = reactive({ assignedTo: '', vehicleType: '', notes: '' })
 const rescueUsers = [
   { id: 1, nickname: '王队长' },
   { id: 2, nickname: '陈师傅' },
@@ -341,227 +824,999 @@ const dispatchFormRules = {
 }
 
 function openDispatchDialog() {
+  if (!drawerAccident.value) return
   dispatchDialogVisible.value = true
 }
 
 async function submitDispatch() {
-  if (!formRef.value) return
+  if (!formRef.value || !drawerAccident.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
-  if (!selectedAccident.value) return
-
   creating.value = true
   try {
     const res = await createDispatch({
-      accidentId: selectedAccident.value.id,
-      assignedTo: dispatchForm.value.assignedTo,
-      vehicleType: dispatchForm.value.vehicleType,
-      notes: dispatchForm.value.notes,
-      assigner: '李指挥',
+      accidentId: drawerAccident.value.id,
+      assignedTo: dispatchForm.assignedTo,
+      vehicleType: dispatchForm.vehicleType,
+      notes: dispatchForm.notes,
+      assigner: userStore.nickname || '指挥人员',
     })
     if (res.code === 200) {
       ElMessage.success('调度任务创建成功')
       dispatchDialogVisible.value = false
-      drawerVisible.value = false
-      dispatchForm.value = { assignedTo: '', vehicleType: '', notes: '' }
+      Object.assign(dispatchForm, { assignedTo: '', vehicleType: '', notes: '' })
+      await fetchAllTasks()
     }
-  } catch (err) {
-    ElMessage.error('创建调度任务失败: ' + (err.message || '未知错误'))
+  } catch (error) {
+    ElMessage.error('创建调度任务失败：' + (error.message || '未知错误'))
   } finally {
     creating.value = false
   }
 }
 
-// ====== 通用 ======
-function statusType(status) {
-  const map = { 待处理: 'danger', 处理中: 'warning', 已处理: 'success', 已结案: 'info' }
-  return map[status] || 'info'
+// ====== 显示辅助 ======
+function compactDateTime(value) {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 16)
+  const pad = (num) => String(num).padStart(2, '0')
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function goToDetail(id) {
-  router.push(`/command/accident/${id}`)
+function statusClass(status) {
+  return {
+    '待处理': 'is-danger',
+    '处理中': 'is-warning',
+    '已处理': 'is-success',
+    '已结案': 'is-muted',
+  }[status] || 'is-muted'
 }
 
-async function fetchAccidents() {
-  accidentStore.loading = true
-  try {
-    const res = await getAccidentList()
-    if (res.code === 200) {
-      accidentStore.setAccidents(res.data.list)
+function taskStatusClass(status) {
+  return {
+    '待接收': 'is-muted',
+    '已出发': 'is-warning',
+    '已到达': 'is-info',
+    '处理中': 'is-primary',
+    '已完成': 'is-success',
+    '已取消': 'is-danger',
+  }[status] || 'is-muted'
+}
+
+async function handleUserCommand(command) {
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
+  if (command === 'logout') {
+    try {
+      await ElMessageBox.confirm('确认退出指挥中心？', '退出登录', {
+        confirmButtonText: '确认退出',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+      userStore.logout()
+      router.push('/login')
+    } catch {
+      // 用户取消
     }
-  } finally {
-    accidentStore.loading = false
   }
 }
 
-// 轮询刷新（5秒检测新数据）
+// ====== 生命周期 ======
 let pollTimer = null
-onMounted(() => {
-  fetchAccidents()
-  pollTimer = setInterval(fetchAccidents, 5000)
+onMounted(async () => {
+  clockTimer = setInterval(() => { now.value = new Date() }, 1000)
+  await refreshAll()
+  pollTimer = setInterval(refreshAll, 10000)
 })
 
 onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
   if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 
 <style lang="scss" scoped>
-@use '@/assets/styles/variables' as *;
+.command-center-page {
+  --cyan: #00e5ff;
+  --cyan-soft: rgba(0, 229, 255, 0.34);
+  --panel-bg: rgba(3, 15, 31, 0.78);
+  --panel-deep: rgba(2, 11, 24, 0.9);
+  --line: rgba(80, 211, 255, 0.2);
+  --text-main: #eafaff;
+  --text-soft: #8fb4c4;
+  --text-dim: #527486;
+  --left-width: 320px;
+  --right-width: 420px;
 
-.dashboard-page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--text-main);
+  background: #020812;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+}
+
+.map-stage,
+.map-vignette,
+.map-grid-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.map-stage { z-index: 0; }
+
+.command-map {
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+
+:deep(.command-map.baidu-map-card) {
+  border: 0;
+  border-radius: 0;
+  background: #071426;
+}
+
+:deep(.command-map .map-container) {
+  filter: saturate(0.92) contrast(1.06) brightness(0.82);
+}
+
+:deep(.command-map .map-overlay) {
+  border: 0;
+  border-radius: 0;
+  background: radial-gradient(circle at center, rgba(7, 35, 62, 0.94), rgba(2, 8, 18, 0.98));
+}
+
+.map-vignette {
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(1, 7, 16, 0.78) 0%, rgba(1, 8, 18, 0.18) 25%, transparent 43%, transparent 57%, rgba(1, 8, 18, 0.18) 75%, rgba(1, 7, 16, 0.78) 100%),
+    linear-gradient(180deg, rgba(1, 8, 18, 0.78) 0%, transparent 14%, transparent 82%, rgba(1, 8, 18, 0.62) 100%);
+}
+
+.map-grid-overlay {
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image:
+    linear-gradient(rgba(0, 229, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.045) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to right, #000 0%, transparent 30%, transparent 70%, #000 100%);
+}
+
+.command-header {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 76px;
+  display: grid;
+  grid-template-columns: 1fr minmax(520px, 780px) 1fr;
+  align-items: center;
+  padding: 0 24px;
+  background: linear-gradient(180deg, rgba(1, 8, 18, 0.96), rgba(1, 8, 18, 0.42), transparent);
+  pointer-events: none;
+}
+
+.header-corner,
+.center-title { pointer-events: auto; }
+
+.header-time {
+  justify-self: start;
+  padding-left: 12px;
+  border-left: 2px solid var(--cyan);
+}
+
+.time-value {
+  font-family: 'DIN Alternate', 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  color: #f4fdff;
+  text-shadow: 0 0 14px rgba(0, 229, 255, 0.5);
+}
+
+.date-value {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-soft);
+  letter-spacing: 0.09em;
+}
+
+.center-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  min-width: 0;
+}
+
+.title-copy {
+  text-align: center;
+  white-space: nowrap;
+
+  h1 {
+    margin: 0;
+    font-size: 27px;
+    line-height: 1.12;
+    font-weight: 650;
+    letter-spacing: 0.12em;
+    color: #f2fdff;
+    text-shadow: 0 0 20px rgba(0, 229, 255, 0.46);
+  }
+
+  p {
+    margin: 7px 0 0;
+    font-size: 9px;
+    color: #5d91a6;
+    letter-spacing: 0.28em;
+  }
+}
+
+.title-line {
+  position: relative;
+  width: 88px;
+  height: 1px;
+  flex-shrink: 1;
+  background: linear-gradient(90deg, transparent, var(--cyan));
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -3px;
+    width: 7px;
+    height: 7px;
+    transform: rotate(45deg);
+    border: 1px solid var(--cyan);
+    background: #051426;
+  }
+
+  &.is-right {
+    transform: scaleX(-1);
+  }
+}
+
+.header-user { justify-self: end; }
+
+.user-console {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 4px 10px 4px 5px;
+  color: var(--text-main);
+  cursor: pointer;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(3, 17, 34, 0.72);
+  backdrop-filter: blur(12px);
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: rgba(0, 229, 255, 0.55);
+    box-shadow: 0 0 18px rgba(0, 229, 255, 0.12);
+  }
+
+  :deep(.el-avatar) {
+    color: var(--cyan);
+    background: rgba(0, 229, 255, 0.12);
+    border: 1px solid rgba(0, 229, 255, 0.32);
+  }
+}
+
+.user-name { font-size: 12px; font-weight: 600; }
+.user-role {
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--cyan);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  background: rgba(0, 229, 255, 0.1);
+}
+
+.side-rail {
+  position: absolute;
+  z-index: 20;
+  top: 86px;
+  bottom: 22px;
+  display: grid;
+  gap: 12px;
+  transition: transform 0.35s cubic-bezier(0.22, 0.8, 0.2, 1), opacity 0.25s ease;
+}
+
+.left-rail {
+  left: 18px;
+  width: var(--left-width);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+
+  &.is-collapsed {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(calc(-100% - 24px));
+  }
+}
+
+.right-rail {
+  right: 18px;
+  width: var(--right-width);
+  grid-template-rows: minmax(0, 1.38fr) minmax(0, 0.92fr);
+
+  &.is-collapsed {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(calc(100% + 24px));
+  }
+}
+
+.hud-panel {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(65, 205, 255, 0.22);
+  background: linear-gradient(145deg, rgba(5, 22, 43, 0.86), rgba(2, 11, 24, 0.76));
+  box-shadow:
+    inset 0 0 36px rgba(0, 184, 255, 0.035),
+    0 12px 40px rgba(0, 0, 0, 0.28),
+    0 0 22px rgba(0, 229, 255, 0.055);
+  backdrop-filter: blur(17px) saturate(1.15);
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    z-index: 3;
+    width: 20px;
+    height: 20px;
+    pointer-events: none;
+  }
+
+  &::before {
+    top: -1px;
+    left: -1px;
+    border-top: 2px solid var(--cyan);
+    border-left: 2px solid var(--cyan);
+  }
+
+  &::after {
+    right: -1px;
+    bottom: -1px;
+    border-right: 2px solid var(--cyan);
+    border-bottom: 2px solid var(--cyan);
+  }
+}
+
+.panel-heading {
+  position: relative;
+  z-index: 2;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 0 18px;
+  border-bottom: 1px solid rgba(67, 183, 222, 0.13);
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.07), transparent 62%);
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 17px;
+    width: 3px;
+    height: 23px;
+    background: var(--cyan);
+    box-shadow: 0 0 12px var(--cyan);
+  }
+
+  h2 {
+    margin: 0;
+    color: #eafaff;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+  }
+
+  p {
+    margin: 3px 0 0;
+    color: #416e82;
+    font-size: 8px;
+    letter-spacing: 0.15em;
+  }
+}
+
+.compact-heading { height: 54px; }
+
+.panel-total,
+.filter-count {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  color: #7bdff4;
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 3px;
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-action {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: #7db2c6;
+  cursor: pointer;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 5px;
+  background: rgba(0, 229, 255, 0.04);
+
+  &:hover { color: var(--cyan); border-color: rgba(0, 229, 255, 0.45); }
+}
+
+.chart-panel {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - #{$header-height} - 48px);
-  overflow: hidden;
 }
 
-// ===== 统计卡片 =====
-.stat-cards {
-  flex-shrink: 0;
-  margin-bottom: 16px;
-
-  .stat-card {
-    --el-card-padding: 0;
-  }
-
-  .el-card {
-    border-radius: 14px;
-    overflow: hidden;
-  }
-
-  .stat-inner {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 18px;
-  }
-
-  .stat-icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    position: relative;
-
-    // 渐变底色覆盖原始内联 style
-    &[style*="background: rgba(59,130,246,0.10)"] {
-      background: linear-gradient(135deg, rgba($accent, 0.12), rgba($accent-secondary, 0.06)) !important;
-    }
-    &[style*="background: rgba(239,68,68,0.10)"] {
-      background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(248,113,113,0.06)) !important;
-    }
-    &[style*="background: rgba(245,158,11,0.10)"] {
-      background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.06)) !important;
-    }
-    &[style*="background: rgba(16,185,129,0.10)"] {
-      background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(52,211,153,0.06)) !important;
-    }
-  }
-
-  .stat-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .stat-num {
-    font-size: 26px;
-    font-weight: 700;
-    color: $text-primary;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .stat-label {
-    font-size: 12px;
-    color: $text-secondary;
-    font-weight: 500;
-  }
-}
-
-// ===== 主区域（地图） =====
-.main-section {
+.chart-body {
   flex: 1;
   min-height: 0;
-  margin-bottom: 0;
+  padding: 0 6px 8px;
 }
 
-.map-card {
-  height: 100%;
+.rail-toggle {
+  position: absolute;
+  z-index: 25;
+  top: 50%;
+  width: 25px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  color: #77cfe3;
+  cursor: pointer;
+  border: 1px solid rgba(0, 229, 255, 0.24);
+  background: rgba(3, 17, 34, 0.8);
+  backdrop-filter: blur(10px);
+  transition: all 0.35s cubic-bezier(0.22, 0.8, 0.2, 1);
+
+  &:hover {
+    color: #fff;
+    border-color: var(--cyan);
+    box-shadow: 0 0 18px rgba(0, 229, 255, 0.18);
+  }
+}
+
+.left-toggle {
+  left: calc(18px + var(--left-width));
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+
+  &.is-collapsed { left: 0; }
+}
+
+.right-toggle {
+  right: calc(18px + var(--right-width));
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+
+  &.is-collapsed { right: 0; }
+}
+
+.incident-panel,
+.dispatch-panel {
   display: flex;
   flex-direction: column;
-
-  .card-header {
-    flex-shrink: 0;
-    margin-bottom: 12px;
-    padding: 0;
-
-    h3 {
-      font-size: 16px;
-      font-weight: 600;
-    }
-  }
-
-  :deep(.baidu-map-card) {
-    flex: 1;
-    min-height: 0;
-    border-radius: 10px;
-  }
 }
 
-// ===== 通用卡片头部 =====
-.card-header {
+.query-controls {
+  flex-shrink: 0;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid rgba(67, 183, 222, 0.12);
+  background: rgba(2, 11, 24, 0.35);
+}
+
+.quick-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 7px;
+  align-items: center;
+}
+
+.query-button { min-width: 52px; }
+
+.advanced-button {
+  height: 28px;
   display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  color: #8db7c8;
+  cursor: pointer;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 5px;
+  background: rgba(0, 229, 255, 0.045);
+  font-size: 11px;
+
+  &:hover { color: var(--cyan); border-color: rgba(0, 229, 255, 0.45); }
+}
+
+.advanced-arrow {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  &.is-open { transform: rotate(180deg); }
+}
+
+.advanced-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px dashed rgba(0, 229, 255, 0.14);
+}
+
+.date-range-filter,
+.advanced-actions { grid-column: 1 / -1; }
+
+.date-range-filter { width: 100% !important; }
+
+.advanced-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  padding-top: 1px;
+}
+
+.text-action {
+  padding: 0;
+  color: #668c9d;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+
+  &:hover,
+  &.is-primary { color: var(--cyan); }
+}
+
+.result-summary {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-top: 7px;
+  color: #53798a;
+  font-size: 10px;
 
-  h3 {
-    font-family: $font-sans;
-    font-size: 16px;
-    font-weight: 600;
-    color: $text-primary;
-    letter-spacing: -0.01em;
+  strong { color: var(--cyan); font-size: 12px; }
+}
+
+.linked-filter {
+  min-width: 0;
+  overflow: hidden;
+  color: #74cbe0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.query-controls .el-input__wrapper),
+:deep(.query-controls .el-select__wrapper),
+:deep(.query-controls .el-date-editor.el-input__wrapper) {
+  min-height: 28px;
+  color: #dffaff;
+  border-radius: 5px;
+  background: rgba(5, 25, 47, 0.84) !important;
+  box-shadow: 0 0 0 1px rgba(73, 188, 226, 0.18) inset !important;
+
+  &:hover { box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.42) inset !important; }
+  &.is-focus { box-shadow: 0 0 0 1px var(--cyan) inset, 0 0 12px rgba(0, 229, 255, 0.08) !important; }
+}
+
+:deep(.query-controls .el-input__inner),
+:deep(.query-controls .el-range-input),
+:deep(.query-controls .el-select__selected-item) {
+  color: #dffaff !important;
+  font-size: 11px;
+}
+
+:deep(.query-controls .el-input__inner::placeholder),
+:deep(.query-controls .el-range-input::placeholder) { color: #54798a; }
+:deep(.query-controls .el-range-separator),
+:deep(.query-controls .el-input__icon),
+:deep(.query-controls .el-select__caret) { color: #5c8799; }
+
+.incident-list,
+.dispatch-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 7px 8px 10px;
+}
+
+.hud-panel :deep(.el-loading-mask) {
+  background: rgba(2, 11, 24, 0.72);
+}
+
+.hud-panel :deep(.el-loading-spinner .circular .path) { stroke: var(--cyan); }
+
+.hud-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 229, 255, 0.28) transparent;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-track { background: transparent; }
+  &::-webkit-scrollbar-thumb { border-radius: 4px; background: rgba(0, 229, 255, 0.25); }
+}
+
+.incident-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 10px 10px 9px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom-color: rgba(79, 161, 191, 0.11);
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.025), transparent);
+  transition: all 0.2s ease;
+
+  &:hover,
+  &.is-active {
+    border-color: rgba(0, 229, 255, 0.27);
+    background: linear-gradient(90deg, rgba(0, 229, 255, 0.1), rgba(0, 229, 255, 0.025));
+    box-shadow: inset 3px 0 0 var(--cyan), 0 0 16px rgba(0, 229, 255, 0.05);
   }
 }
 
-.text-muted {
-  color: $text-light;
-  font-size: 13px;
-}
-
-// ===== drawer 额外内容 =====
-.drawer-section {
-  margin-top: 16px;
-  padding: 14px;
-  background: var(--el-bg-color-page);
-  border-radius: 10px;
-}
-
-.drawer-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: $text-primary;
-  margin-bottom: 8px;
+.row-main { min-width: 0; }
+.row-topline,
+.dispatch-topline,
+.dispatch-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.drawer-section-text {
-  font-size: 13px;
-  color: $text-secondary;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  margin: 0;
+.case-number {
+  color: #dffaff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
 }
 
-.feedback-text {
-  color: $text-primary;
+:deep(.incident-row .el-tag) {
+  height: 18px;
+  padding: 0 6px;
+  line-height: 18px;
+  font-size: 9px;
+  border-radius: 3px;
+}
+
+.row-title {
+  margin-top: 4px;
+  color: #c5e4ed;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.row-location {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 4px;
+  color: #62899a;
+  font-size: 10px;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.row-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+
+  time { color: #486e80; font-size: 9px; white-space: nowrap; }
+}
+
+.status-chip,
+.task-status,
+.drawer-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  color: #819aaa;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: rgba(129, 154, 170, 0.08);
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+
+  &.is-danger { color: #ff5d7d; background: rgba(255, 93, 125, 0.08); }
+  &.is-warning { color: #ffb84d; background: rgba(255, 184, 77, 0.08); }
+  &.is-success { color: #38e6a1; background: rgba(56, 230, 161, 0.08); }
+  &.is-primary { color: #00e5ff; background: rgba(0, 229, 255, 0.08); }
+  &.is-info { color: #76a9ff; background: rgba(118, 169, 255, 0.08); }
+  &.is-muted { color: #7891a0; background: rgba(120, 145, 160, 0.08); }
+}
+
+.dispatch-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 31px minmax(0, 1fr) 16px;
+  gap: 9px;
+  align-items: center;
+  padding: 9px 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom-color: rgba(79, 161, 191, 0.11);
+  transition: all 0.2s ease;
+
+  &:hover,
+  &.is-active {
+    border-color: rgba(0, 229, 255, 0.24);
+    background: rgba(0, 229, 255, 0.065);
+  }
+}
+
+.dispatch-icon {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  color: #6fd7ed;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 5px;
+  background: rgba(0, 229, 255, 0.07);
+}
+
+.dispatch-copy { min-width: 0; }
+.dispatch-topline {
+  color: #d9f4fa;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.dispatch-title {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #9fc4d4;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  span { color: #557a8c; }
+}
+
+.dispatch-meta {
+  margin-top: 4px;
+  color: #4e7485;
+  font-size: 9px;
+}
+
+.locate-arrow { color: #396477; font-size: 13px; }
+.dispatch-row:hover .locate-arrow { color: var(--cyan); }
+
+.empty-state {
+  height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #42697a;
+  font-size: 11px;
+
+  .el-icon { font-size: 24px; }
+}
+
+.compact-empty { height: 80px; }
+
+.map-status-strip {
+  position: absolute;
+  z-index: 15;
+  left: 50%;
+  bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  transform: translateX(-50%);
+  color: #6992a3;
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 4px;
+  background: rgba(2, 11, 24, 0.72);
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(10px);
+  font-size: 9px;
+  white-space: nowrap;
+
+  span {
+    padding: 5px 11px;
+    border-right: 1px solid rgba(0, 229, 255, 0.1);
+    &:last-child { border-right: 0; }
+  }
+
+  strong { color: #c9f6ff; }
+}
+
+.online-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #39e79f;
+  box-shadow: 0 0 8px #39e79f;
+  animation: status-pulse 1.8s ease-in-out infinite;
+}
+
+.drawer-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(0, 229, 255, 0.09), rgba(64, 84, 255, 0.04));
+
+  h3 { margin: 4px 0 0; color: #edfaff; font-size: 17px; }
+}
+
+.drawer-eyebrow {
+  color: #54869b;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.drawer-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #6b98aa;
+  font-size: 11px;
+}
+
+.drawer-section,
+.drawer-link-card {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid rgba(0, 229, 255, 0.13);
+  border-radius: 7px;
+  background: rgba(0, 229, 255, 0.035);
+
+  h4 { margin: 0 0 7px; color: #a9d5e2; font-size: 12px; }
+  p { margin: 0; color: #7da3b2; font-size: 11px; line-height: 1.75; white-space: pre-wrap; }
+
+  &.is-advice { border-color: rgba(86, 119, 255, 0.2); background: rgba(86, 119, 255, 0.045); }
+  &.is-feedback { border-color: rgba(56, 230, 161, 0.2); background: rgba(56, 230, 161, 0.045); }
+}
+
+.drawer-link-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+
+  div { display: flex; flex-direction: column; gap: 4px; }
+  span { color: #587e90; font-size: 9px; }
+  strong { color: #bfeaf4; font-size: 11px; }
+  .el-icon { color: var(--cyan); }
+
+  &:hover { border-color: rgba(0, 229, 255, 0.4); }
+}
+
+.drawer-footer-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.88); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+@media (max-width: 1550px) {
+  .command-center-page {
+    --left-width: 286px;
+    --right-width: 378px;
+  }
+
+  .command-header { grid-template-columns: 1fr minmax(460px, 650px) 1fr; }
+  .title-copy h1 { font-size: 22px; }
+  .title-line { width: 56px; }
+  .user-role { display: none; }
+}
+
+@media (max-height: 860px) {
+  .command-header { height: 66px; }
+  .side-rail { top: 72px; bottom: 14px; gap: 8px; }
+  .panel-heading { height: 48px; }
+  .panel-heading p { display: none; }
+  .chart-body { padding-bottom: 2px; }
+  :deep(.semi-gauge-chart) { min-height: 180px; }
+  .query-controls { padding-top: 7px; padding-bottom: 5px; }
+  .incident-row { padding-top: 7px; padding-bottom: 7px; }
+  .dispatch-row { padding-top: 7px; padding-bottom: 7px; }
+  .map-status-strip { bottom: 8px; }
+}
+</style>
+
+<style lang="scss">
+.command-detail-drawer.el-drawer {
+  color: #dffaff;
+  border-left: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: 0;
+  background: rgba(3, 15, 31, 0.97);
+  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.42), 0 0 24px rgba(0, 229, 255, 0.06);
+  backdrop-filter: blur(18px);
+
+  .el-drawer__header {
+    color: #eafaff;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.12);
+    padding-bottom: 14px;
+  }
+
+  .el-drawer__body { color: #b8dbe5; }
+  .el-drawer__footer { border-top: 1px solid rgba(0, 229, 255, 0.1); padding-top: 14px; }
+
+  .el-descriptions__body { background: transparent; }
+  .el-descriptions__table { border-color: rgba(0, 229, 255, 0.13) !important; }
+  .el-descriptions__cell { border-color: rgba(0, 229, 255, 0.13) !important; }
+  .el-descriptions__label.el-descriptions__cell.is-bordered-label {
+    width: 94px;
+    color: #6f99aa;
+    background: rgba(0, 229, 255, 0.045);
+  }
+  .el-descriptions__content.el-descriptions__cell.is-bordered-content {
+    color: #c7e8ef;
+    background: rgba(3, 16, 32, 0.45);
+  }
+}
+
+.command-drawer-modal { background: rgba(0, 5, 12, 0.42) !important; }
+
+.command-dispatch-dialog.el-dialog {
+  color: #dffaff;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: rgba(3, 15, 31, 0.98);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 25px rgba(0, 229, 255, 0.08);
+
+  .el-dialog__title { color: #eafaff; }
+  .el-form-item__label { color: #86aebd; }
+  .el-input__wrapper,
+  .el-select__wrapper,
+  .el-textarea__inner {
+    color: #dffaff;
+    background: rgba(5, 25, 47, 0.88) !important;
+    box-shadow: 0 0 0 1px rgba(0, 229, 255, 0.18) inset !important;
+  }
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-select__selected-item { color: #dffaff !important; }
 }
 
 .drawer-tags {
