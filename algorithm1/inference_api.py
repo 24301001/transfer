@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import shutil
 import sys
@@ -6,6 +8,9 @@ import uuid
 import pathlib
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
+import traceback
+
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 YOLOV5_ROOT = PROJECT_ROOT / "yolov5"
@@ -156,6 +161,7 @@ def ensure_dirs() -> None:
 
 def get_model() -> YoloV5Inference:
     global model_service, model_error
+
     if model_service is not None:
         return model_service
 
@@ -163,21 +169,45 @@ def get_model() -> YoloV5Inference:
         model_service = YoloV5Inference(DEFAULT_WEIGHTS)
         model_error = None
         return model_service
+
     except Exception as exc:
-        model_error = str(exc)
-        raise HTTPException(status_code=500, detail=model_error) from exc
+        model_error = f"{type(exc).__name__}: {exc}"
+
+        print("\n========== 模型加载失败 ==========")
+        print(model_error)
+        traceback.print_exc()
+        print("=================================\n")
+
+        raise HTTPException(
+            status_code=500,
+            detail=model_error,
+        ) from exc
 
 
 @app.on_event("startup")
 def startup() -> None:
     global model_service, model_error
+
     ensure_dirs()
+
+    print(f"项目目录：{PROJECT_ROOT}")
+    print(f"YOLOv5目录：{YOLOV5_ROOT}")
+    print(f"权重路径：{DEFAULT_WEIGHTS}")
+    print(f"权重是否存在：{DEFAULT_WEIGHTS.exists()}")
+
     try:
         model_service = YoloV5Inference(DEFAULT_WEIGHTS)
         model_error = None
+        print("模型加载成功")
+
     except Exception as exc:
         model_service = None
-        model_error = str(exc)
+        model_error = f"{type(exc).__name__}: {exc}"
+
+        print("\n========== 启动时模型加载失败 ==========")
+        print(model_error)
+        traceback.print_exc()
+        print("=======================================\n")
 
 
 @app.get("/health")
