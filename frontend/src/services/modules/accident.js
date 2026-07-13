@@ -1,6 +1,6 @@
 import request from '../request'
 
-const UPLOAD_DETECTION_TIMEOUT = 10 * 60 * 1000
+const UPLOAD_DETECTION_TIMEOUT = 45 * 1000
 
 // ====== 枚举映射 ======
 
@@ -152,12 +152,18 @@ function transformIncident(inc) {
     trafficFlow: inc.trafficFlow || '-',
     weather: inc.weather || '-',
     roadLevel: inc.roadLevel || '-',
+    roadStatus: inc.roadStatus || '-',
+    peopleFlow: inc.peopleFlow ?? '-',
     sceneLabels: splitLabels(inc.sceneLabels),
     injuryReported: !!inc.injuryReported || (inc.injuredCount || 0) > 0,
     peopleInvolved: inc.peopleInvolved ?? 0,
     injuredCount: inc.injuredCount ?? 0,
     injuryEstimate: inc.injuryEstimate || '',
     riskScore: inc.riskLevel ? { LOW: 20, MEDIUM: 40, HIGH: 70, CRITICAL: 90 }[inc.riskLevel] : 0,
+    riskFactors: '',
+    modelVersion: '',
+    dataModuleTraceId: '',
+    evidenceSummary: '',
     // 处置建议
     disposalAdvice: inc.suggestion || '',
     supportAdvice: '',
@@ -208,6 +214,11 @@ function transformIncidentDetail(data) {
     base.disposalAdvice = pred.suggestions || base.disposalAdvice
     base.aiExplanation = pred.explanation || base.aiExplanation
     base.type = pred.accidentType || base.type
+    base.riskScore = pred.riskScore ?? base.riskScore
+    base.riskFactors = pred.riskFactors || ''
+    base.modelVersion = pred.modelVersion || ''
+    base.dataModuleTraceId = pred.dataModuleTraceId || ''
+    base.evidenceSummary = pred.evidenceSummary || ''
   }
 
   // 附加调度任务信息（含处置反馈）
@@ -285,6 +296,11 @@ export async function addAccident(data) {
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    trafficFlow: data.trafficFlow || null,
+    peopleFlow: data.peopleFlow || null,
+    weather: data.weather || '',
+    roadLevel: data.roadLevel || '',
+    roadStatus: data.roadStatus || '',
     peopleInvolved: data.peopleInvolved || null,
     injuredCount: data.injuredCount || null,
     injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
@@ -322,6 +338,11 @@ export async function addAccidentWithAttachments(data) {
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    trafficFlow: data.trafficFlow || null,
+    peopleFlow: data.peopleFlow || null,
+    weather: data.weather || '',
+    roadLevel: data.roadLevel || '',
+    roadStatus: data.roadStatus || '',
     peopleInvolved: data.peopleInvolved || null,
     injuredCount: data.injuredCount || null,
     injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
@@ -404,6 +425,11 @@ export async function publicReport(data) {
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    trafficFlow: data.trafficFlow || null,
+    peopleFlow: data.peopleFlow || null,
+    weather: data.weather || '',
+    roadLevel: data.roadLevel || '',
+    roadStatus: data.roadStatus || '',
     peopleInvolved: data.peopleInvolved || null,
     injuredCount: data.injuredCount || null,
     injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,
@@ -438,6 +464,11 @@ export async function publicReportWithAttachments(data) {
     description: data.description || '',
     reportUserId: data.reporterId || null,
     occupiedLanes: data.occupiedLanes || null,
+    trafficFlow: data.trafficFlow || null,
+    peopleFlow: data.peopleFlow || null,
+    weather: data.weather || '',
+    roadLevel: data.roadLevel || '',
+    roadStatus: data.roadStatus || '',
     peopleInvolved: data.peopleInvolved || null,
     injuredCount: data.injuredCount || null,
     injuryReported: !!data.injuryReported || (data.injuredCount || 0) > 0,

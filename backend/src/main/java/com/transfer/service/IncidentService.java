@@ -48,6 +48,12 @@ import com.transfer.enums.RiskLevel;
 import com.transfer.model.Incident;
 import com.transfer.model.IncidentAttachment;
 import com.transfer.model.PredictionResult;
+import com.transfer.prediction.AccidentTypeResult;
+import com.transfer.prediction.PredictionAlgorithmType;
+import com.transfer.prediction.PredictionModelClient;
+import com.transfer.prediction.PredictionModuleRequest;
+import com.transfer.prediction.PredictionModuleResponse;
+import com.transfer.prediction.RiskImpactResult;
 import com.transfer.repository.DispatchTaskRepository;
 import com.transfer.repository.IncidentAttachmentRepository;
 import com.transfer.repository.IncidentRepository;
@@ -66,6 +72,7 @@ public class IncidentService {
     private final PredictionResultRepository predictionResultRepository;
     private final DispatchTaskRepository dispatchTaskRepository;
     private final PredictionClient predictionClient;
+    private final PredictionModelClient predictionModelClient;
     private final DeepSeekClient deepSeekClient;
     private final FormalDispositionPlanService formalDispositionPlanService;
     private final ArrivalEstimateService arrivalEstimateService;
@@ -84,6 +91,7 @@ public class IncidentService {
             PredictionResultRepository predictionResultRepository,
             DispatchTaskRepository dispatchTaskRepository,
             PredictionClient predictionClient,
+            PredictionModelClient predictionModelClient,
             DeepSeekClient deepSeekClient,
             FormalDispositionPlanService formalDispositionPlanService,
             ArrivalEstimateService arrivalEstimateService,
@@ -102,6 +110,7 @@ public class IncidentService {
         this.predictionResultRepository = predictionResultRepository;
         this.dispatchTaskRepository = dispatchTaskRepository;
         this.predictionClient = predictionClient;
+        this.predictionModelClient = predictionModelClient;
         this.deepSeekClient = deepSeekClient;
         this.formalDispositionPlanService = formalDispositionPlanService;
         this.arrivalEstimateService = arrivalEstimateService;
@@ -789,6 +798,65 @@ public class IncidentService {
                         attachments
                 );
 
+        if (predictionModelClient.isConfigured()) {
+            PredictionModuleRequest moduleRequest =
+                    buildPredictionModuleRequest(
+                            incident,
+                            attachments
+                    );
+
+            PredictionModuleResponse moduleResponse =
+                    predictionModelClient.predict(moduleRequest);
+
+            if (moduleResponse.isCompleted()) {
+                PredictionModuleResultRequest merged =
+                        mergePredictionModuleResponse(
+                                moduleResponse,
+                                moduleRequest
+                        );
+
+                acceptPredictionResult(
+                        incidentId,
+                        merged,
+                        operatorUserId
+                );
+
+                operationLogService.record(
+                        operatorUserId,
+                        "SUBMIT_PREDICTION_REQUEST_SYNC",
+                        "Incident",
+                        incident.getId().toString(),
+                        null,
+                        moduleResponse.traceId()
+                );
+
+                return new PredictionSubmitResponse(
+                        true,
+                        "COMPLETED",
+                        "算法2预测已完成并写入事故详情。",
+                        moduleResponse.traceId(),
+                        request,
+                        null
+                );
+            }
+
+            log.warn(
+                    "算法2预测未完成: incidentId={}, status={}, error={}",
+                    incidentId,
+                    moduleResponse.status(),
+                    moduleResponse.errorMessage()
+            );
+
+            return new PredictionSubmitResponse(
+                    false,
+                    moduleResponse.status(),
+                    moduleResponse.errorMessage(),
+                    moduleResponse.traceId(),
+                    request,
+                    null
+            );
+        }
+
         PredictionSubmitResponse response =
                 predictionClient.predict(request);
 
@@ -1324,6 +1392,182 @@ public PredictionDisplayResponse regenerateLatestPredictionExplanation(
                 incident.getRoadLevel(),
                 attachmentPayloads
         );
+    }
+
+    /**
+     * 构造发送给算法2同步预测模块的请求。
+     */
+    private PredictionModuleRequest buildPredictionModuleRequest(
+            Incident incident,
+            List<IncidentAttachment> attachments
+    ) {
+        List<PredictionAttachmentPayload> attachmentPayloads =
+                attachments == null
+                        ? List.of()
+                        : attachments.stream()
+                        .map(this::toPredictionAttachmentPayload)
+                        .toList();
+
+        return new PredictionModuleRequest(
+                incident.getId(),
+                incident.getIncidentNo(),
+                List.of(
+                        PredictionAlgorithmType.ACCIDENT_TYPE,
+                        PredictionAlgorithmType.RISK_IMPACT
+                ),
+                incident.getLocationName(),
+                incident.getAddress(),
+                incident.getDescription(),
+                incident.getLongitude(),
+                incident.getLatitude(),
+                incident.getOccupiedLanes(),
+                incident.getTrafficFlow(),
+                incident.getPeopleFlow(),
+                incident.getWeather(),
+                incident.getRoadLevel(),
+                incident.getRoadName(),
+                attachmentPayloads
+        );
+    }
+
+    /**
+     * 将算法2同步响应合并为后端现有的预测结果入库 DTO。
+     */
+    private PredictionModuleResultRequest mergePredictionModuleResponse(
+            PredictionModuleResponse response,
+            PredictionModuleRequest request
+    ) {
+        PredictionModuleResponse.PredictionModuleResponseResults results =
+                response.results();
+
+        AccidentTypeResult accidentTypeResult =
+                results == null ? null : results.accidentType();
+        RiskImpactResult riskImpactResult =
+                results == null ? null : results.riskImpact();
+
+        String accidentType =
+                accidentTypeResult == null
+                        ? firstNonBlank(
+                        request.description(),
+                        "其他交通事故"
+                )
+                        : firstNonBlank(
+                        accidentTypeResult.accidentType(),
+                        request.description(),
+                        "其他交通事故"
+                );
+
+        RiskLevel riskLevel =
+                riskImpactResult == null
+                        || riskImpactResult.riskLevel() == null
+                        ? RiskLevel.MEDIUM
+                        : normalizeThreeClassRisk(
+                        riskImpactResult.riskLevel()
+                );
+
+        Double confidence =
+                max(
+                        accidentTypeResult == null
+                                ? null
+                                : accidentTypeResult.confidence(),
+                        riskImpactResult == null
+                                ? null
+                                : riskImpactResult.confidence()
+                );
+
+        if (confidence == null) {
+            confidence = 0.75;
+        }
+
+        Integer congestionDurationMinutes =
+                riskImpactResult == null
+                        || riskImpactResult.congestionDurationMinutes() == null
+                        ? 20
+                        : riskImpactResult.congestionDurationMinutes();
+
+        Integer recoveryDurationMinutes =
+                riskImpactResult == null
+                        || riskImpactResult.recoveryDurationMinutes() == null
+                        ? Math.max(40, congestionDurationMinutes + 10)
+                        : riskImpactResult.recoveryDurationMinutes();
+
+        if (recoveryDurationMinutes < congestionDurationMinutes) {
+            recoveryDurationMinutes = congestionDurationMinutes + 10;
+        }
+
+        return new PredictionModuleResultRequest(
+                accidentType,
+                riskLevel,
+                riskImpactResult == null
+                        ? null
+                        : riskImpactResult.riskScore(),
+                congestionDurationMinutes,
+                recoveryDurationMinutes,
+                confidence,
+                joinVersions(
+                        accidentTypeResult == null
+                                ? null
+                                : accidentTypeResult.modelVersion(),
+                        riskImpactResult == null
+                                ? null
+                                : riskImpactResult.modelVersion()
+                ),
+                riskImpactResult == null
+                        ? null
+                        : riskImpactResult.riskFactors(),
+                accidentTypeResult == null
+                        ? null
+                        : accidentTypeResult.imageEvidence(),
+                accidentTypeResult == null
+                        ? null
+                        : accidentTypeResult.evidenceSummary(),
+                response.traceId(),
+                null,
+                riskImpactResult == null
+                        ? null
+                        : riskImpactResult.suggestion(),
+                riskImpactResult == null
+                        ? null
+                        : riskImpactResult.explanation()
+        );
+    }
+
+    private RiskLevel normalizeThreeClassRisk(
+            RiskLevel riskLevel
+    ) {
+        if (riskLevel == RiskLevel.CRITICAL) {
+            return RiskLevel.HIGH;
+        }
+
+        return riskLevel;
+    }
+
+    private static Double max(Double a, Double b) {
+        if (a == null) {
+            return b;
+        }
+
+        if (b == null) {
+            return a;
+        }
+
+        return a >= b ? a : b;
+    }
+
+    private static String joinVersions(String a, String b) {
+        if (a == null && b == null) {
+            return "algorithm2-expert-fusion";
+        }
+
+        if (a == null) {
+            return b;
+        }
+
+        if (b == null) {
+            return a;
+        }
+
+        return a + "+" + b;
     }
 
     private PredictionAttachmentPayload toPredictionAttachmentPayload(

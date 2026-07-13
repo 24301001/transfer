@@ -85,9 +85,11 @@
               </el-descriptions-item>
               <el-descriptions-item label="区域">{{ accident.location?.area }}</el-descriptions-item>
               <el-descriptions-item label="道路等级">{{ accident.roadLevel }}</el-descriptions-item>
+              <el-descriptions-item label="路面状况">{{ accident.roadStatus }}</el-descriptions-item>
               <el-descriptions-item label="影响车道">{{ accident.affectedLanes }}</el-descriptions-item>
               <el-descriptions-item label="天气">{{ accident.weather }}</el-descriptions-item>
               <el-descriptions-item label="当前车流">{{ accident.trafficFlow }}</el-descriptions-item>
+              <el-descriptions-item label="现场人流">{{ accident.peopleFlow }}</el-descriptions-item>
               <el-descriptions-item label="识别可信度">{{ accident.confidence }}</el-descriptions-item>
               <el-descriptions-item label="是否有人受伤">
                 <el-tag :type="accident.injuryReported ? 'danger' : 'success'" size="small">
@@ -172,6 +174,59 @@
           </div>
         </el-col>
       </el-row>
+
+      <!-- 算法2风险评估 -->
+      <div class="page-card" style="margin-top:16px;">
+        <div class="section-header">
+          <h3 class="section-title">算法2风险评估</h3>
+          <el-tag v-if="accident.modelVersion" size="small" effect="plain">
+            {{ accident.modelVersion }}
+          </el-tag>
+        </div>
+        <div class="algorithm-summary">
+          <div class="algorithm-metric">
+            <span class="metric-label">融合风险等级</span>
+            <RiskBadge :level="accident.riskLevel" size="large" />
+          </div>
+          <div class="algorithm-metric">
+            <span class="metric-label">风险评分</span>
+            <span class="metric-value">{{ formatRiskScore(accident.riskScore) }}</span>
+          </div>
+          <div class="algorithm-metric">
+            <span class="metric-label">模型置信度</span>
+            <span class="metric-value">{{ accident.confidence }}</span>
+          </div>
+          <div class="algorithm-metric">
+            <span class="metric-label">追踪编号</span>
+            <code class="trace-code">{{ accident.dataModuleTraceId || '-' }}</code>
+          </div>
+        </div>
+
+        <el-descriptions :column="2" border class="algorithm-detail">
+          <el-descriptions-item label="占用车道">{{ accident.affectedLanes }}</el-descriptions-item>
+          <el-descriptions-item label="车流强度">{{ accident.trafficFlow }}</el-descriptions-item>
+          <el-descriptions-item label="人流强度">{{ accident.peopleFlow }}</el-descriptions-item>
+          <el-descriptions-item label="天气">{{ accident.weather }}</el-descriptions-item>
+          <el-descriptions-item label="道路等级">{{ accident.roadLevel }}</el-descriptions-item>
+          <el-descriptions-item label="路面状况">{{ accident.roadStatus }}</el-descriptions-item>
+          <el-descriptions-item v-if="accident.riskFactors" label="主要风险因子" :span="2">
+            <div class="factor-tags">
+              <el-tag
+                v-for="factor in splitRiskFactors(accident.riskFactors)"
+                :key="factor"
+                size="small"
+                type="warning"
+                effect="plain"
+              >
+                {{ factor }}
+              </el-tag>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="accident.evidenceSummary" label="证据摘要" :span="2">
+            {{ accident.evidenceSummary }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
 
       <!-- AI 解释 -->
       <div class="page-card" style="margin-top:16px;" v-if="accident.aiExplanation">
@@ -273,6 +328,21 @@ function createDispatch() {
     router.push(`/command/dispatch?accidentId=${accident.value.id}`)
   }
 }
+
+function formatRiskScore(score) {
+  if (score === null || score === undefined || score === '') return '-'
+  const value = Number(score)
+  if (Number.isNaN(value)) return score
+  return value.toFixed(1)
+}
+
+function splitRiskFactors(value) {
+  if (!value) return []
+  return String(value)
+    .split(/[、,，;；]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -331,6 +401,71 @@ function createDispatch() {
   padding-left: 12px;
   border-left: 3px solid $accent;
   color: $text-primary;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+
+  .section-title {
+    margin-bottom: 0;
+  }
+}
+
+.algorithm-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.algorithm-metric {
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  background: rgba($border-light, 0.45);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: $text-light;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: $text-primary;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-code {
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: $border-light;
+  color: $text-secondary;
+  font-size: 12px;
+  font-family: $font-mono;
+  overflow-wrap: anywhere;
+}
+
+.algorithm-detail {
+  margin-top: 6px;
+}
+
+.factor-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .image-gallery {

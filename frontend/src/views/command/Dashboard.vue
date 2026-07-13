@@ -344,6 +344,47 @@
           </el-descriptions-item>
         </el-descriptions>
 
+        <div class="drawer-algorithm-panel">
+          <div class="drawer-algorithm-head">
+            <h4>算法2风险评估</h4>
+            <el-tag v-if="(drawerDetail || selectedAccident).modelVersion" size="small" effect="plain">
+              {{ (drawerDetail || selectedAccident).modelVersion }}
+            </el-tag>
+          </div>
+          <div class="drawer-algorithm-grid">
+            <div>
+              <span>风险评分</span>
+              <strong>{{ formatRiskScore((drawerDetail || selectedAccident).riskScore) }}</strong>
+            </div>
+            <div>
+              <span>人流强度</span>
+              <strong>{{ (drawerDetail || selectedAccident).peopleFlow || '-' }}</strong>
+            </div>
+            <div>
+              <span>路面状况</span>
+              <strong>{{ (drawerDetail || selectedAccident).roadStatus || '-' }}</strong>
+            </div>
+            <div>
+              <span>追踪编号</span>
+              <code>{{ (drawerDetail || selectedAccident).dataModuleTraceId || '-' }}</code>
+            </div>
+          </div>
+          <div v-if="(drawerDetail || selectedAccident).riskFactors" class="drawer-factor-tags">
+            <el-tag
+              v-for="factor in splitRiskFactors((drawerDetail || selectedAccident).riskFactors)"
+              :key="factor"
+              size="small"
+              type="warning"
+              effect="plain"
+            >
+              {{ factor }}
+            </el-tag>
+          </div>
+          <p v-if="(drawerDetail || selectedAccident).evidenceSummary" class="drawer-evidence">
+            {{ (drawerDetail || selectedAccident).evidenceSummary }}
+          </p>
+        </div>
+
         <!-- 事故描述（列表数据已有） -->
         <div v-if="selectedAccident.description" class="drawer-section">
           <h4 class="drawer-section-title">事故描述</h4>
@@ -421,6 +462,45 @@
           <el-descriptions-item label="影响车道">{{ drawerAccident.affectedLanes }}</el-descriptions-item>
           <el-descriptions-item label="天气 / 道路">{{ drawerAccident.weather }} / {{ drawerAccident.roadLevel }}</el-descriptions-item>
         </el-descriptions>
+
+        <div class="drawer-algorithm-panel">
+          <div class="drawer-algorithm-head">
+            <h4>算法2风险评估</h4>
+            <el-tag v-if="drawerAccident.modelVersion" size="small" effect="plain">
+              {{ drawerAccident.modelVersion }}
+            </el-tag>
+          </div>
+          <div class="drawer-algorithm-grid">
+            <div>
+              <span>风险评分</span>
+              <strong>{{ formatRiskScore(drawerAccident.riskScore) }}</strong>
+            </div>
+            <div>
+              <span>人流强度</span>
+              <strong>{{ drawerAccident.peopleFlow || '-' }}</strong>
+            </div>
+            <div>
+              <span>路面状况</span>
+              <strong>{{ drawerAccident.roadStatus || '-' }}</strong>
+            </div>
+            <div>
+              <span>追踪编号</span>
+              <code>{{ drawerAccident.dataModuleTraceId || '-' }}</code>
+            </div>
+          </div>
+          <div v-if="drawerAccident.riskFactors" class="drawer-factor-tags">
+            <el-tag
+              v-for="factor in splitRiskFactors(drawerAccident.riskFactors)"
+              :key="factor"
+              size="small"
+              type="warning"
+              effect="plain"
+            >
+              {{ factor }}
+            </el-tag>
+          </div>
+          <p v-if="drawerAccident.evidenceSummary" class="drawer-evidence">{{ drawerAccident.evidenceSummary }}</p>
+        </div>
 
         <div v-if="drawerAccident.description" class="drawer-section">
           <h4>事故描述</h4>
@@ -1007,6 +1087,24 @@ function openTask(task) {
   drawerVisible.value = true
   drawerDetail.value = null
   focusTaskOnMap(task)
+  if (selectedAccidentId.value) {
+    loadAccidentDetail(selectedAccidentId.value)
+  }
+}
+
+function formatRiskScore(score) {
+  if (score === null || score === undefined || score === '') return '-'
+  const value = Number(score)
+  if (Number.isNaN(value)) return score
+  return value.toFixed(1)
+}
+
+function splitRiskFactors(value) {
+  if (!value) return []
+  return String(value)
+    .split(/[、,，;；]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
 }
 
 // ====== 抽屉内 ETA 车辆调度 ======
@@ -2217,6 +2315,75 @@ onUnmounted(() => {
   background: #000;
 }
 
+.drawer-algorithm-panel {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(0, 229, 255, 0.045);
+}
+
+.drawer-algorithm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+
+  h4 {
+    margin: 0;
+    color: #eafaff;
+    font-size: 14px;
+    font-weight: 700;
+  }
+}
+
+.drawer-algorithm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+
+  div {
+    min-width: 0;
+    padding: 8px;
+    border-radius: 6px;
+    background: rgba(3, 16, 32, 0.5);
+  }
+
+  span {
+    display: block;
+    margin-bottom: 4px;
+    color: #6f99aa;
+    font-size: 12px;
+  }
+
+  strong,
+  code {
+    color: #dffaff;
+    font-size: 13px;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+    font-weight: 500;
+  }
+}
+
+.drawer-factor-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.drawer-evidence {
+  margin: 10px 0 0;
+  color: #a9ced8;
+  font-size: 13px;
+  line-height: 1.6;
+}
 
 .selected-vehicle-box {
   width: 100%;

@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -42,10 +43,16 @@ public class YoloDetectClient {
     private static final List<String> EXCLUDED_CLASSES = List.of("car");
 
     public YoloDetectClient(
-            @Value("${app.yolo.base-url:http://localhost:8000}") String yoloBaseUrl
+            @Value("${app.yolo.base-url:http://localhost:8000}") String yoloBaseUrl,
+            @Value("${app.yolo.connect-timeout:3000}") int connectTimeout,
+            @Value("${app.yolo.read-timeout:30000}") int readTimeout
     ) {
         this.yoloBaseUrl = yoloBaseUrl;
-        this.restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory requestFactory =
+                new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(connectTimeout);
+        requestFactory.setReadTimeout(readTimeout);
+        this.restTemplate = new RestTemplate(requestFactory);
         this.objectMapper = new ObjectMapper();
     }
 

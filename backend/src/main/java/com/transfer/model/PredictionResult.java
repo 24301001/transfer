@@ -1,4 +1,4 @@
-package com.transfer.model;
+﻿package com.transfer.model;
 
 import com.transfer.enums.RiskLevel;
 import jakarta.persistence.Column;
@@ -29,7 +29,7 @@ public class PredictionResult extends AuditableEntity {
 
     private Double confidence;
 
-    @Column(length = 40)
+    @Column(length = 200)
     private String modelVersion;
 
     @Column(length = 1000)
@@ -173,3 +173,4 @@ public class PredictionResult extends AuditableEntity {
         this.rawResult = rawResult;
     }
 }
+

@@ -8,10 +8,14 @@ import com.transfer.enums.CoordinateType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Optional;
 
 @Service
@@ -42,6 +46,15 @@ public class BaiduWeatherService {
 
         this.restClient = RestClient.builder()
                 .baseUrl(normalizedBaseUrl)
+                .messageConverters(converters -> converters.stream()
+                        .filter(MappingJackson2HttpMessageConverter.class::isInstance)
+                        .map(MappingJackson2HttpMessageConverter.class::cast)
+                        .forEach(converter -> {
+                            var mediaTypes = new ArrayList<>(converter.getSupportedMediaTypes());
+                            mediaTypes.add(new MediaType("text", "javascript", StandardCharsets.UTF_8));
+                            mediaTypes.add(new MediaType("application", "javascript", StandardCharsets.UTF_8));
+                            converter.setSupportedMediaTypes(mediaTypes);
+                        }))
                 .build();
 
         this.serverAk =

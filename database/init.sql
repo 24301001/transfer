@@ -1,8 +1,8 @@
--- ============================================================
+﻿-- ============================================================
 -- init.sql
--- 道路交通事故风险预估与后果预测平台
+-- 閬撹矾浜ら€氫簨鏁呴闄╅浼颁笌鍚庢灉棰勬祴骞冲彴
 -- MySQL 8.x
--- 依据当前 Spring Boot / JPA 实体重写
+-- 渚濇嵁褰撳墠 Spring Boot / JPA 瀹炰綋閲嶅啓
 -- ============================================================
 
 SET NAMES utf8mb4;
@@ -14,8 +14,7 @@ CREATE DATABASE IF NOT EXISTS `traffic_risk_db`
 
 USE `traffic_risk_db`;
 
--- 按依赖关系反向删除旧表
-DROP TABLE IF EXISTS `dispatch_decisions`;
+-- 鎸変緷璧栧叧绯诲弽鍚戝垹闄ゆ棫琛?DROP TABLE IF EXISTS `dispatch_decisions`;
 DROP TABLE IF EXISTS `clearance_rescue_advices`;
 DROP TABLE IF EXISTS `dispatch_tasks`;
 DROP TABLE IF EXISTS `incident_attachments`;
@@ -30,8 +29,8 @@ DROP TABLE IF EXISTS `items`;
 DROP TABLE IF EXISTS `app_users`;
 
 -- ============================================================
--- 1. 用户账户
--- 对应实体：UserAccount
+-- 1. 鐢ㄦ埛璐︽埛
+-- 瀵瑰簲瀹炰綋锛歎serAccount
 -- ============================================================
 CREATE TABLE `app_users` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -58,8 +57,8 @@ CREATE TABLE `app_users` (
 
 
 -- ============================================================
--- 2. 事故事件
--- 对应实体：Incident
+-- 2. 浜嬫晠浜嬩欢
+-- 瀵瑰簲瀹炰綋锛欼ncident
 -- ============================================================
 CREATE TABLE `incidents` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -84,6 +83,7 @@ CREATE TABLE `incidents` (
 
   `initial_accident_type` VARCHAR(80) NULL,
   `confirmed_accident_type` VARCHAR(80) NULL,
+  `scene_labels` VARCHAR(500) NULL,
 
   `description` VARCHAR(1000) NOT NULL,
 
@@ -93,6 +93,7 @@ CREATE TABLE `incidents` (
 
   `people_involved` INT NULL,
   `injured_count` INT NULL,
+  `injury_reported` TINYINT(1) NOT NULL DEFAULT 0,
   `injury_estimate` VARCHAR(500) NULL,
 
   `weather` VARCHAR(40) NULL,
@@ -143,8 +144,8 @@ CREATE TABLE `incidents` (
 
 
 -- ============================================================
--- 3. 事故附件
--- 对应实体：IncidentAttachment
+-- 3. 浜嬫晠闄勪欢
+-- 瀵瑰簲瀹炰綋锛欼ncidentAttachment
 -- ============================================================
 CREATE TABLE `incident_attachments` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -183,8 +184,8 @@ CREATE TABLE `incident_attachments` (
 
 
 -- ============================================================
--- 4. 预测结果
--- 对应实体：PredictionResult
+-- 4. 棰勬祴缁撴灉
+-- 瀵瑰簲瀹炰綋锛歅redictionResult
 -- ============================================================
 CREATE TABLE `prediction_results` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -201,7 +202,7 @@ CREATE TABLE `prediction_results` (
 
   `confidence` DOUBLE NULL,
 
-  `model_version` VARCHAR(40) NULL,
+  `model_version` VARCHAR(200) NULL,
 
   `suggestions` VARCHAR(1000) NULL,
   `explanation` VARCHAR(1500) NULL,
@@ -227,8 +228,8 @@ CREATE TABLE `prediction_results` (
 
 
 -- ============================================================
--- 5. 调度任务
--- 对应实体：DispatchTask
+-- 5. 璋冨害浠诲姟
+-- 瀵瑰簲瀹炰綋锛欴ispatchTask
 -- ============================================================
 CREATE TABLE `dispatch_tasks` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -302,8 +303,7 @@ CREATE TABLE `dispatch_tasks` (
 
 
 -- ============================================================
--- 6. 应急车辆
--- 对应实体：EmergencyVehicle
+-- 6. 搴旀€ヨ溅杈?-- 瀵瑰簲瀹炰綋锛欵mergencyVehicle
 -- ============================================================
 CREATE TABLE `emergency_vehicles` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -347,8 +347,8 @@ CREATE TABLE `emergency_vehicles` (
 
 
 -- ============================================================
--- 7. AI 清障救援建议
--- 对应实体：ClearanceRescueAdvice
+-- 7. AI 娓呴殰鏁戞彺寤鸿
+-- 瀵瑰簲瀹炰綋锛欳learanceRescueAdvice
 -- ============================================================
 CREATE TABLE `clearance_rescue_advices` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -385,8 +385,8 @@ CREATE TABLE `clearance_rescue_advices` (
 
 
 -- ============================================================
--- 8. 指挥调度决策
--- 对应实体：DispatchDecision
+-- 8. 鎸囨尌璋冨害鍐崇瓥
+-- 瀵瑰簲瀹炰綋锛欴ispatchDecision
 -- ============================================================
 CREATE TABLE `dispatch_decisions` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -430,8 +430,8 @@ CREATE TABLE `dispatch_decisions` (
 
 
 -- ============================================================
--- 9. 救援中心
--- 对应实体：RescueCenter
+-- 9. 鏁戞彺涓績
+-- 瀵瑰簲瀹炰綋锛歊escueCenter
 -- ============================================================
 CREATE TABLE `rescue_centers` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -462,8 +462,8 @@ CREATE TABLE `rescue_centers` (
 
 
 -- ============================================================
--- 10. 通知记录
--- 对应实体：NotificationRecord
+-- 10. 閫氱煡璁板綍
+-- 瀵瑰簲瀹炰綋锛歂otificationRecord
 -- ============================================================
 CREATE TABLE `notification_records` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -498,8 +498,8 @@ CREATE TABLE `notification_records` (
 
 
 -- ============================================================
--- 11. 操作日志
--- 对应实体：OperationLog
+-- 11. 鎿嶄綔鏃ュ織
+-- 瀵瑰簲瀹炰綋锛歄perationLog
 -- ============================================================
 CREATE TABLE `operation_logs` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -532,13 +532,11 @@ CREATE TABLE `operation_logs` (
 
 
 -- ============================================================
--- 12. 系统字典与配置
--- 对应实体：SystemData
+-- 12. 绯荤粺瀛楀吀涓庨厤缃?-- 瀵瑰簲瀹炰綋锛歋ystemData
 --
--- 注意：
--- Java 字段名为 value
--- 但通过 @Column(name = "config_value")
--- 映射到数据库中的 config_value
+-- 娉ㄦ剰锛?-- Java 瀛楁鍚嶄负 value
+-- 浣嗛€氳繃 @Column(name = "config_value")
+-- 鏄犲皠鍒版暟鎹簱涓殑 config_value
 -- ============================================================
 CREATE TABLE `system_data` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -570,8 +568,7 @@ CREATE TABLE `system_data` (
 
 
 -- ============================================================
--- 13. 示例 Item 表
--- 对应实体：Item
+-- 13. 绀轰緥 Item 琛?-- 瀵瑰簲瀹炰綋锛欼tem
 -- ============================================================
 CREATE TABLE `items` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -591,3 +588,4 @@ CREATE TABLE `items` (
 
 
 SET FOREIGN_KEY_CHECKS = 1;
+

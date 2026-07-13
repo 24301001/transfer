@@ -45,6 +45,7 @@ erDiagram
         varchar road_name
         varchar initial_accident_type
         varchar confirmed_accident_type
+        varchar scene_labels
         varchar description
         double longitude
         double latitude
@@ -58,6 +59,7 @@ erDiagram
         int people_flow
         int people_involved
         int injured_count
+        tinyint injury_reported
         varchar injury_estimate
         varchar weather
         varchar road_level

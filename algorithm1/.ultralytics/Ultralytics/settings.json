@@ -1,0 +1,21 @@
+{
+  "settings_version": "0.0.6",
+  "datasets_dir": "C:\\Users\\LENOVO\\Desktop\\transfer-master1\\transfer-master\\algorithm1\\datasets",
+  "weights_dir": "weights",
+  "runs_dir": "runs",
+  "uuid": "1bfc689917171fe33b3e9317f6b5c83e36f6edca71bea3d1fdf7fa5b462feb2a",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "hub": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

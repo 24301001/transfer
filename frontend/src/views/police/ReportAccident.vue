@@ -145,10 +145,11 @@
                 v-for="label in SCENE_LABEL_OPTIONS"
                 :key="label"
                 :label="label"
+                :value="label"
               />
             </el-checkbox-group>
             <p class="scene-tip">
-              {{ recognizedSceneLabels.length ? '已根据上传照片/视频自动勾选，可人工复核修改' : '可先人工勾选，提交后系统会从照片/视频中补充识别标签' }}
+              {{ recognizedSceneLabels.length ? '已根据上传照片/视频自动勾选，可人工复核修改' : '可先人工勾选，提交后系统会自动补充识别标签' }}
             </p>
           </div>
         </el-form-item>
@@ -168,6 +169,60 @@
 
         <el-form-item v-if="aiDetectedType" label="AI识别">
           <el-tag type="success" effect="dark">{{ aiDetectedType }}</el-tag>
+        </el-form-item>
+
+        <!-- 算法2结构化输入 -->
+        <el-form-item label="道路信息">
+          <div class="structured-grid">
+            <el-input-number
+              v-model="form.occupiedLanes"
+              :min="0"
+              :max="12"
+              controls-position="right"
+              placeholder="占用车道"
+            />
+            <el-select v-model="form.roadLevel" clearable placeholder="道路等级">
+              <el-option label="高速" value="高速" />
+              <el-option label="快速路" value="快速路" />
+              <el-option label="主干路" value="主干路" />
+              <el-option label="次干路" value="次干路" />
+              <el-option label="支路" value="支路" />
+            </el-select>
+            <el-select v-model="form.roadStatus" clearable placeholder="路面状况">
+              <el-option label="正常" value="正常" />
+              <el-option label="湿滑" value="湿滑" />
+              <el-option label="积水" value="积水" />
+              <el-option label="结冰" value="结冰" />
+              <el-option label="施工" value="施工" />
+            </el-select>
+          </div>
+        </el-form-item>
+
+        <el-form-item label="现场流量">
+          <div class="structured-grid">
+            <el-input-number
+              v-model="form.trafficFlow"
+              :min="0"
+              :max="100"
+              controls-position="right"
+              placeholder="车流强度"
+            />
+            <el-input-number
+              v-model="form.peopleFlow"
+              :min="0"
+              :max="100"
+              controls-position="right"
+              placeholder="人流强度"
+            />
+            <el-select v-model="form.weather" clearable placeholder="现场天气">
+              <el-option label="晴" value="晴" />
+              <el-option label="多云" value="多云" />
+              <el-option label="阴" value="阴" />
+              <el-option label="雨" value="雨" />
+              <el-option label="雪" value="雪" />
+              <el-option label="雾" value="雾" />
+            </el-select>
+          </div>
         </el-form-item>
 
         <!-- 旧数据兼容：事故类型由 AI 标签自动写入，不再让用户手动选择 -->
@@ -218,7 +273,7 @@
             :rows="4"
             maxlength="500"
             show-word-limit
-            placeholder="请描述事故情况，如：追尾、碰撞、占用车道、是否有人员受伤等"
+            placeholder="请描述事故情况，如追尾、剐蹭、占用车道、是否有人受伤等"
           />
         </el-form-item>
 
@@ -300,7 +355,7 @@
             </ul>
             <el-alert
               v-if="publicReportMeta.immediateAdvice.call120Required"
-              title="检测到可能的人员受伤，请立即拨打 120 急救电话！"
+              title="检测到可能的人员受伤，请立即拨打 120 急救电话"
               type="danger"
               :closable="false"
               show-icon
@@ -323,7 +378,7 @@
           />
         </div>
 
-        <!-- ── 3. 预测模块提交状态 ── -->
+        <!-- 3. 预测模块提交状态 -->
         <div v-if="publicReportMeta?.predictionSubmit" class="result-section prediction-section">
           <h4>
             <el-icon style="vertical-align:-3px;"><DataAnalysis /></el-icon>
@@ -359,6 +414,7 @@
                 v-for="label in SCENE_LABEL_OPTIONS"
                 :key="label"
                 :label="label"
+                :value="label"
               />
             </el-checkbox-group>
           </div>
@@ -482,18 +538,24 @@ const publicReportMeta = ref(null)
 /** 提交成功后显示绿色提示 */
 const submitSucceeded = ref(false)
 
-// ====== 表单数据（必须在 AI 聊天上下文之前定义，避免 TDZ） ======
+// ====== 表单数据（必须在 AI 聊天上下文之前定义，避免 TDZ）======
 const form = reactive({
   images: [],
   video: null,
   customLocation: '',
   locationStr: '',
   locationName: '',   // 地点名称
-  locationLat: null,  // WGS84 纬度
+  locationLat: null,  // WGS84 绾害
   locationLng: null,  // WGS84 经度
   accidentType: '',
   sceneLabels: [],
   description: '',
+  occupiedLanes: null,
+  trafficFlow: null,
+  peopleFlow: null,
+  weather: '',
+  roadLevel: '',
+  roadStatus: '',
   peopleInvolved: null,
   injuredCount: null,
   injuryEstimate: '',
@@ -528,7 +590,7 @@ watch(
   { deep: true }
 )
 
-// 地图中心（BD09 坐标系，用于传递给 MapCard）
+// 地图中心（BD09 坐标系，用于传给 MapCard）
 const mapCenter = ref(null)
 
 const SCENE_LABEL_OPTIONS = ['car flip', 'car crash', 'car damage', 'fire/smoke']
@@ -643,7 +705,7 @@ async function startRecording() {
       }
     }, 1000)
   } catch (err) {
-    console.error('摄像头启动失败:', err)
+    console.error('摄像头启动失败', err)
     ElMessage.error('无法访问摄像头，请检查权限设置')
     recording.value = false
   }
@@ -698,7 +760,7 @@ function onInjuryReportedChange(value) {
   }
 }
 
-/** 地图标记 — 给 MapCard 传递 BD09 坐标（百度地图使用） */
+/** 地图标记，给 MapCard 传入 BD09 坐标（百度地图使用） */
 const mapMarkers = computed(() => {
   if (!form.locationLat || !form.locationLng) return null
   // 将表单中存的 WGS84 转为 BD09 在地图上显示
@@ -715,15 +777,15 @@ function onCustomLocationInput(val) {
   if (val) {
     form.locationStr = val
     form.locationName = val
-    // 不自动清除坐标，用户可能已在地图上选了点
+    // 不自动清除坐标，用户可能已经在地图上选了点
   }
 }
 
 // ====== 地图位置选取 ======
 /** 用户在地图上点击选位时触发（坐标来自百度地图，为 BD09） */
 function onMapLocationSelect(data) {
-  // data 包含 BD09 的 lng, lat 和地址信息
-  // 转换 BD09 → WGS84 用于后端存储
+  // data 包含 BD09 的 lng、lat 和地址信息
+  // 转换 BD09 为 WGS84 用于后端存储
   const wgs84 = bd09ToWgs84(data.lng, data.lat)
 
   form.locationLat = wgs84.lat
@@ -733,10 +795,9 @@ function onMapLocationSelect(data) {
 
   // 地图中心自动跟随选择点（MapCard 已 panTo）
 }
-
 /** 用户点击「确认」按钮 */
 function onMapLocationConfirm(data) {
-  // 同 onMapLocationSelect 逻辑
+  // 复用 onMapLocationSelect 逻辑
   if (data) {
     const wgs84 = bd09ToWgs84(data.lng, data.lat)
     form.locationLat = wgs84.lat
@@ -744,79 +805,60 @@ function onMapLocationConfirm(data) {
     form.locationName = data.address || form.locationName
     form.locationStr = data.address || form.locationStr
   }
-  ElMessage.success(`已选择位置: ${form.locationStr}`)
+  ElMessage.success(`已选择位置：${form.locationStr}`)
 }
 
 // ====== 自动定位 ======
 async function handleAutoLocate() {
   locating.value = true
   try {
-    // ---------- 1. 优先使用真实 GPS ----------
     let coords
     let source = 'GPS'
+
     try {
       coords = await getRealCurrentPosition()
     } catch (gpsErr) {
       console.warn('[ReportAccident] GPS 定位失败，尝试百度 IP 定位:', gpsErr.message)
-
-      // ---------- 2. 降级：百度地图 IP 定位 ----------
       try {
         coords = await getBaiduIPLocation()
         source = 'IP'
       } catch (ipErr) {
         console.warn('[ReportAccident] 百度 IP 定位也失败:', ipErr.message)
         ElMessage.warning('自动定位不可用，请点击地图选择位置')
-        locating.value = false
         return
       }
     }
 
-    const { lat, lng } = coords // WGS84
-
-    // 反向地理编码获取地址
-    // 优先用 BMapGL.Geocoder（客户端走浏览器 AK，不走后端，避免 502）
+    const { lat, lng } = coords
     let addressText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+
     try {
       const BMapGL = window.BMapGL
       if (BMapGL && typeof BMapGL.Geocoder === 'function') {
         const geocoder = new BMapGL.Geocoder()
         const bd09 = wgs84ToBd09(lng, lat)
         const result = await new Promise((resolve, reject) => {
-          geocoder.getLocation(
-            new BMapGL.Point(bd09.lng, bd09.lat),
-            (res) => {
-              res && res.address ? resolve(res) : reject(new Error('无地址'))
-            }
-          )
+          geocoder.getLocation(new BMapGL.Point(bd09.lng, bd09.lat), (res) => {
+            res && res.address ? resolve(res) : reject(new Error('无地址'))
+          })
         })
-        if (result.address) {
-          addressText = result.address
-        }
+        if (result.address) addressText = result.address
       } else {
-        // Geocoder 不可用时降级调用后端
         const loc = await reverseGeocode(lng, lat, 'WGS84')
         addressText = loc.formattedAddress || loc.semanticDescription || addressText
       }
     } catch (addrErr) {
       console.warn('[ReportAccident] 地址解析失败，使用坐标作为地址:', addrErr.message)
-      // 地址解析失败不影响定位，直接用坐标
     }
 
-    // 更新表单
     form.locationLat = lat
     form.locationLng = lng
     form.locationName = addressText
     form.locationStr = addressText
     form.customLocation = addressText
-
-    // 设置地图中心（WGS84 → MapCard 需要 BD09）
     setMapCenterToWgs84(lng, lat)
 
-    if (source === 'IP') {
-      ElMessage.info(`IP 定位成功（${addressText}）`)
-    } else {
-      ElMessage.success('定位成功')
-    }
+    source === 'IP' ? ElMessage.info(`IP 定位成功：${addressText}`) : ElMessage.success('定位成功')
   } catch (err) {
     ElMessage.error(err.message || '定位失败')
   } finally {
@@ -825,8 +867,7 @@ async function handleAutoLocate() {
 }
 
 /**
- * 将 WGS84 坐标转换为 BD09 并设为地图中心
- */
+ * 将 WGS84 坐标转换为 BD09 并设为地图中心 */
 async function setMapCenterToWgs84(lng, lat) {
   const bd09 = wgs84ToBd09(lng, lat)
   mapCenter.value = { lng: bd09.lng, lat: bd09.lat }
@@ -867,6 +908,12 @@ async function handleSubmit() {
       description: form.description,
       accidentType: form.accidentType || '',
       sceneLabels: form.sceneLabels,
+      occupiedLanes: form.occupiedLanes,
+      trafficFlow: form.trafficFlow,
+      peopleFlow: form.peopleFlow,
+      weather: form.weather,
+      roadLevel: form.roadLevel,
+      roadStatus: form.roadStatus,
       peopleInvolved: form.peopleInvolved || 0,
       injuredCount: form.injuredCount || 0,
       injuryReported: form.injuryReported,
@@ -911,10 +958,13 @@ async function handleSubmit() {
 
       submitSucceeded.value = true
       resultVisible.value = true
-      ElMessage.success('事故提交成功！')
+      ElMessage.success('事故提交成功')
     }
-  } catch {
-    // 错误已在拦截器中处理
+  } catch (err) {
+    const message = err?.code === 'ECONNABORTED'
+      ? '提交超时：后端附件识别或预测服务响应过慢，请稍后重试'
+      : (err?.response?.data?.message || err?.message || '提交失败，请检查后端服务')
+    ElMessage.error(message)
   } finally {
     submitting.value = false
   }
@@ -931,6 +981,12 @@ function handleReset() {
   form.accidentType = ''
   form.sceneLabels = []
   form.description = ''
+  form.occupiedLanes = null
+  form.trafficFlow = null
+  form.peopleFlow = null
+  form.weather = ''
+  form.roadLevel = ''
+  form.roadStatus = ''
   form.peopleInvolved = null
   form.injuredCount = null
   form.injuryEstimate = ''
@@ -1271,6 +1327,18 @@ function openAdviceDialog() {
   gap: 6px;
 }
 
+.structured-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+
+  :deep(.el-input-number),
+  :deep(.el-select) {
+    width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
   .video-recorder {
     .video-placeholder {
@@ -1374,3 +1442,6 @@ function openAdviceDialog() {
   }
 }
 </style>
+
+
+
