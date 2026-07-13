@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS incident_attachments (
 -- JPA: DispatchTask extends AuditableEntity
 -- 包含完整的车辆调度与轨迹追踪字段
 -- ============================================================
-CREATE TABLE IF NOT EXISTS dispatch_tasks (
+CREATE TABLE IF NOT EXISTS dispatch_task (
     id                              BIGINT AUTO_INCREMENT PRIMARY KEY,
     task_no                         VARCHAR(40)  NOT NULL UNIQUE COMMENT '任务编号',
     incident_id                     BIGINT       NOT NULL COMMENT '关联事故ID',

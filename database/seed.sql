@@ -176,7 +176,7 @@ INSERT INTO incident_attachments (
 -- ============================================================
 -- 6. 调度任务 (5条) — 含车辆轨迹字段
 -- ============================================================
-INSERT INTO dispatch_tasks (
+INSERT INTO dispatch_task (
     task_no, incident_id, task_type,
     receiver_user_id, assigned_by_user_id, rescue_center_id,
     vehicle_required, vehicle_type,
