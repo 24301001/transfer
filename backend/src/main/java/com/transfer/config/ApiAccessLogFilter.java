@@ -42,7 +42,9 @@ public class ApiAccessLogFilter extends OncePerRequestFilter {
         }
         return uri.startsWith("/api/")
                 && !uri.startsWith("/api/v1/realtime")
-                && !uri.startsWith("/api/health");
+                && !uri.equals("/api/health")
+                && !uri.equals("/api/v1/health")
+                && !uri.equals("/api/v1/admin/health");
     }
 
     private void recordSafely(HttpServletRequest request, HttpServletResponse response, long costMs) {

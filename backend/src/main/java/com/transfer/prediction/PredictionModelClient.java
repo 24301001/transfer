@@ -19,4 +19,9 @@ public interface PredictionModelClient {
      * @return true 表示预测模块健康
      */
     boolean healthCheck();
+
+    /**
+     * 当前客户端是否已配置预测模块地址。
+     */
+    boolean isConfigured();
 }

@@ -12,6 +12,8 @@ public interface EmergencyVehicleRepository
 
     boolean existsByVehicleNo(String vehicleNo);
 
+    long countByStatus(VehicleStatus status);
+
     List<EmergencyVehicle>
     findByVehicleTypeOrderByVehicleNoAsc(
             VehicleType vehicleType

@@ -4,12 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-
-import java.time.Duration;
 
 /**
  * 预测模块 HTTP 客户端的默认实现。
@@ -24,6 +23,8 @@ public class DefaultPredictionModelClient implements PredictionModelClient {
 
     private final RestClient restClient;
     private final boolean configured;
+    private final String predictPath;
+    private final String healthPath;
 
     public DefaultPredictionModelClient(
             @Value("${app.prediction-module.base-url:}")
@@ -39,10 +40,18 @@ public class DefaultPredictionModelClient implements PredictionModelClient {
     ) {
         String trimmed = baseUrl == null ? "" : baseUrl.trim();
         this.configured = !trimmed.isBlank();
+        this.predictPath = normalizePath(predictPath, "/predict");
+        this.healthPath = normalizePath(healthPath, "/health");
 
         if (configured) {
+            SimpleClientHttpRequestFactory requestFactory =
+                    new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(Math.max(500, connectTimeout));
+            requestFactory.setReadTimeout(Math.max(500, readTimeout));
+
             this.restClient = RestClient.builder()
                     .baseUrl(trimmed)
+                    .requestFactory(requestFactory)
                     .defaultHeaders(headers ->
                             headers.setContentType(MediaType.APPLICATION_JSON))
                     .requestInterceptor((request, body, execution) -> {
@@ -50,8 +59,11 @@ public class DefaultPredictionModelClient implements PredictionModelClient {
                         return execution.execute(request, body);
                     })
                     .build();
-            log.info("预测模块客户端已配置: baseUrl={}, connectTimeout={}ms, readTimeout={}ms",
-                    trimmed, connectTimeout, readTimeout);
+            log.info(
+                    "预测模块客户端已配置: baseUrl={}, predictPath={}, healthPath={}, "
+                            + "connectTimeout={}ms, readTimeout={}ms",
+                    trimmed, this.predictPath, this.healthPath, connectTimeout, readTimeout
+            );
         } else {
             this.restClient = null;
             log.warn("预测模块 URL 未配置 (app.prediction-module.base-url)，"
@@ -73,10 +85,19 @@ public class DefaultPredictionModelClient implements PredictionModelClient {
 
         try {
             PredictionModuleResponse response = restClient.post()
-                    .uri("/predict")
+                    .uri(predictPath)
                     .body(request)
                     .retrieve()
                     .body(PredictionModuleResponse.class);
+
+            if (response == null) {
+                return new PredictionModuleResponse(
+                        null,
+                        "EMPTY_RESPONSE",
+                        null,
+                        "预测模块返回空响应"
+                );
+            }
 
             log.info("预测模块响应: traceId={}, status={}",
                     response.traceId(), response.status());
@@ -110,7 +131,7 @@ public class DefaultPredictionModelClient implements PredictionModelClient {
 
         try {
             restClient.get()
-                    .uri("/health")
+                    .uri(healthPath)
                     .retrieve()
                     .toBodilessEntity();
             return true;
@@ -118,5 +139,18 @@ public class DefaultPredictionModelClient implements PredictionModelClient {
             log.debug("预测模块健康检查失败: {}", ex.getMessage());
             return false;
         }
+    }
+
+    @Override
+    public boolean isConfigured() {
+        return configured;
+    }
+
+    private String normalizePath(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        String trimmed = value.trim();
+        return trimmed.startsWith("/") ? trimmed : "/" + trimmed;
     }
 }
