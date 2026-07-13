@@ -85,6 +85,8 @@ const props = defineProps({
   ak: { type: String, default: '' },
   /** 标记物坐标系类型，用于将标记坐标转换为 BD09 显示 */
   markerCoordType: { type: String, default: 'WGS84' },
+  /** 标记变化时是否只在首次自动适配视野；用户拖动后保持当前位置 */
+  fitViewOnce: { type: Boolean, default: false },
 })
 
 const emit = defineEmits([
@@ -116,6 +118,14 @@ const selectedAddress = ref('')
 let markersRendered = false
 /** 是否等待 tilesloaded 后刷新标记 */
 let pendingMarkerRender = false
+/** 是否已经完成过首次标记视野适配 */
+let hasAutoFittedViewport = false
+/** 用户是否已手动拖动地图；一旦接管视野，就不再自动回正 */
+let userAdjustedViewport = false
+
+function onUserDragStart() {
+  userAdjustedViewport = true
+}
 
 /** 地图瓦片加载完成回调 — 首次渲染标记或排期刷新 */
 function onTilesLoaded() {
@@ -144,6 +154,8 @@ async function initMap() {
     if (!mapContainer.value) return // 组件已卸载
 
     // 创建地图
+    hasAutoFittedViewport = false
+    userAdjustedViewport = false
     mapInstance = new BMapGL.Map(mapContainer.value)
 
     // 启用鼠标滚轮缩放
@@ -175,6 +187,9 @@ async function initMap() {
     // 控件
     mapInstance.addControl(new BMapGL.ScaleControl())
     mapInstance.addControl(new BMapGL.ZoomControl())
+
+    // 用户手动拖动后，视野控制权交给用户，后续数据刷新不再自动回正
+    mapInstance.addEventListener('dragstart', onUserDragStart)
 
     // 设置点击事件（picker 模式）
     if (props.pickerMode) {
@@ -345,12 +360,19 @@ function renderMarkers() {
   })
 
   // 适配到所有标记（异常保护）
-  if (validMarkers.length > 0 && !props.center) {
+  // fitViewOnce=true 时仅首次自动适配；用户拖动后，即使首次适配尚未发生也不再抢回视野。
+  const shouldFitViewport =
+    validMarkers.length > 0 &&
+    !props.center &&
+    (!props.fitViewOnce || (!hasAutoFittedViewport && !userAdjustedViewport))
+
+  if (shouldFitViewport) {
     try {
       const points = validMarkers.map((m) => new BMapGL.Point(m.lng, m.lat))
       const viewport = mapInstance.getViewport(points)
       if (viewport && viewport.center && isFinite(viewport.zoom)) {
         mapInstance.centerAndZoom(viewport.center, viewport.zoom)
+        hasAutoFittedViewport = true
       }
     } catch (e) {
       console.warn('[MapCard] getViewport 自适应失败:', e)
@@ -390,6 +412,7 @@ onBeforeUnmount(() => {
   if (mapInstance) {
     mapInstance.removeEventListener('click', onMapClick)
     mapInstance.removeEventListener('tilesloaded', onTilesLoaded)
+    mapInstance.removeEventListener('dragstart', onUserDragStart)
     mapInstance.destroy()
     mapInstance = null
   }

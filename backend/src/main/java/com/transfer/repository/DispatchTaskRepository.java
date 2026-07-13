@@ -35,6 +35,8 @@ public interface DispatchTaskRepository
 
     long countByStatus(TaskStatus status);
 
+    long countByStatusIn(Collection<TaskStatus> statuses);
+
     long countByIncidentId(Long incidentId);
 
     long countByIncidentIdAndStatusIn(

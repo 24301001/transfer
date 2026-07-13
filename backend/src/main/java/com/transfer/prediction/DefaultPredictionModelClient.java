@@ -19,20 +19,20 @@ import java.util.Optional;
 /**
  * 预测模块 HTTP 客户端默认实现。
  *
- * 发送预测请求前，会按事故经纬度查询百度地图实时天气：
+ * <p>发送预测请求前，会按事故经纬度查询百度地图实时天气：</p>
  *
- * 1. 将天气现象写入原 weather 字段；
- * 2. 将结构化天气写入 weatherDetail；
- * 3. 天气服务失败时不阻断预测。
+ * <ol>
+ *     <li>将天气现象写入原 weather 字段；</li>
+ *     <li>将结构化天气写入 weatherDetail；</li>
+ *     <li>天气服务失败时不阻断预测。</li>
+ * </ol>
  */
 @Component
 public class DefaultPredictionModelClient
         implements PredictionModelClient {
 
     private static final Logger log =
-            LoggerFactory.getLogger(
-                    DefaultPredictionModelClient.class
-            );
+            LoggerFactory.getLogger(DefaultPredictionModelClient.class);
 
     private final RestClient restClient;
     private final BaiduWeatherService weatherService;
@@ -60,37 +60,30 @@ public class DefaultPredictionModelClient
             int readTimeout
     ) {
         this.weatherService = weatherService;
-
-        this.predictPath =
-                normalizePath(
-                        predictPath,
-                        "/predict"
-                );
-
-        this.healthPath =
-                normalizePath(
-                        healthPath,
-                        "/health"
-                );
+        this.predictPath = normalizePath(predictPath, "/predict");
+        this.healthPath = normalizePath(healthPath, "/health");
 
         String trimmedBaseUrl =
-                baseUrl == null
-                        ? ""
-                        : baseUrl.trim();
+                baseUrl == null ? "" : baseUrl.trim();
 
-        this.configured =
-                !trimmedBaseUrl.isBlank();
+        this.configured = !trimmedBaseUrl.isBlank();
 
         if (configured) {
+            int effectiveConnectTimeout =
+                    Math.max(500, connectTimeout);
+
+            int effectiveReadTimeout =
+                    Math.max(500, readTimeout);
+
             SimpleClientHttpRequestFactory requestFactory =
                     new SimpleClientHttpRequestFactory();
 
             requestFactory.setConnectTimeout(
-                    Math.max(connectTimeout, 1)
+                    effectiveConnectTimeout
             );
 
             requestFactory.setReadTimeout(
-                    Math.max(readTimeout, 1)
+                    effectiveReadTimeout
             );
 
             this.restClient =
@@ -122,14 +115,15 @@ public class DefaultPredictionModelClient
                     "预测模块客户端已配置: "
                             + "baseUrl={}, "
                             + "predictPath={}, "
+                            + "healthPath={}, "
                             + "connectTimeout={}ms, "
                             + "readTimeout={}ms",
                     trimmedBaseUrl,
                     this.predictPath,
-                    connectTimeout,
-                    readTimeout
+                    this.healthPath,
+                    effectiveConnectTimeout,
+                    effectiveReadTimeout
             );
-
         } else {
             this.restClient = null;
 
@@ -145,7 +139,7 @@ public class DefaultPredictionModelClient
     public PredictionModuleResponse predict(
             PredictionModuleRequest request
     ) {
-        if (!configured) {
+        if (!configured || restClient == null) {
             log.warn("预测模块未配置，返回降级响应");
 
             return new PredictionModuleResponse(
@@ -166,9 +160,7 @@ public class DefaultPredictionModelClient
                             .uri(predictPath)
                             .body(enrichedRequest)
                             .retrieve()
-                            .body(
-                                    PredictionModuleResponse.class
-                            );
+                            .body(PredictionModuleResponse.class);
 
             if (response == null) {
                 return new PredictionModuleResponse(
@@ -247,7 +239,7 @@ public class DefaultPredictionModelClient
 
             return true;
 
-        } catch (Exception ex) {
+        } catch (RestClientException ex) {
             log.debug(
                     "预测模块健康检查失败: {}",
                     ex.getMessage()
@@ -257,6 +249,17 @@ public class DefaultPredictionModelClient
         }
     }
 
+    @Override
+    public boolean isConfigured() {
+        return configured;
+    }
+
+    /**
+     * 为预测请求补充实时天气数据。
+     *
+     * <p>当请求没有坐标、已经包含天气详情，或者天气服务调用失败时，
+     * 直接返回原请求，避免天气功能影响主预测流程。</p>
+     */
     private PredictionModuleRequest enrichWeather(
             PredictionModuleRequest request
     ) {
@@ -267,51 +270,65 @@ public class DefaultPredictionModelClient
             return request;
         }
 
-        /*
-         * 当前事故上报页面明确传入 coordinateType=WGS84，
-         * 因此这里按 WGS84 查询天气。
-         */
-        Optional<WeatherFeaturePayload> weather =
-                weatherService.tryGetCurrentWeather(
-                        request.longitude(),
-                        request.latitude(),
-                        CoordinateType.WGS84
-                );
+        try {
+            /*
+             * 当前事故上报页面明确传入 coordinateType=WGS84，
+             * 因此这里按 WGS84 查询天气。
+             */
+            Optional<WeatherFeaturePayload> weather =
+                    weatherService.tryGetCurrentWeather(
+                            request.longitude(),
+                            request.latitude(),
+                            CoordinateType.WGS84
+                    );
 
-        if (weather.isEmpty()) {
+            if (weather.isEmpty()) {
+                return request;
+            }
+
+            WeatherFeaturePayload detail =
+                    weather.get();
+
+            log.info(
+                    "已为预测请求补充百度天气: "
+                            + "incidentId={}, "
+                            + "weather={}, "
+                            + "temp={}℃",
+                    request.incidentId(),
+                    detail.text(),
+                    detail.temperatureC()
+            );
+
+            return request.withWeatherDetail(
+                    detail.text(),
+                    detail
+            );
+
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "获取实时天气失败，将使用原始预测请求: "
+                            + "incidentId={}, error={}",
+                    request.incidentId(),
+                    ex.getMessage()
+            );
+
             return request;
         }
-
-        WeatherFeaturePayload detail =
-                weather.get();
-
-        log.info(
-                "已为预测请求补充百度天气: "
-                        + "incidentId={}, "
-                        + "weather={}, "
-                        + "temp={}℃",
-                request.incidentId(),
-                detail.text(),
-                detail.temperatureC()
-        );
-
-        return request.withWeatherDetail(
-                detail.text(),
-                detail
-        );
     }
 
     private String normalizePath(
             String value,
-            String defaultValue
+            String fallback
     ) {
-        String path =
-                value == null || value.isBlank()
-                        ? defaultValue
-                        : value.trim();
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
 
-        return path.startsWith("/")
-                ? path
-                : "/" + path;
+        String trimmed = value.trim();
+
+        return trimmed.startsWith("/")
+                ? trimmed
+                : "/" + trimmed;
     }
 }
+
