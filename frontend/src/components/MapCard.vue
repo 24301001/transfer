@@ -40,7 +40,7 @@
     </div>
 
     <!-- 地图控件（非 picker 模式） -->
-    <div v-if="!pickerMode && mapLoaded" class="map-controls">
+    <div v-if="!pickerMode && mapLoaded && showZoomControls" class="map-controls">
       <el-button-group>
         <el-button size="small" @click="zoomIn">
           <el-icon><Plus /></el-icon>
@@ -52,7 +52,7 @@
     </div>
 
     <!-- 遮罩提示（展示模式，提示可点击） -->
-    <div v-if="!pickerMode && !loadError" class="map-click-hint" @click="handleCardClick">
+    <div v-if="!pickerMode && !loadError && showHint" class="map-click-hint" @click="handleCardClick">
       <span class="hint-text">{{ hint || '点击查看地图' }}</span>
     </div>
   </div>
@@ -87,6 +87,14 @@ const props = defineProps({
   markerCoordType: { type: String, default: 'WGS84' },
   /** 标记变化时是否只在首次自动适配视野；用户拖动后保持当前位置 */
   fitViewOnce: { type: Boolean, default: false },
+  /** 展示模式下是否显示底部点击提示 */
+  showHint: { type: Boolean, default: true },
+  /** 是否显示组件右上角缩放按钮 */
+  showZoomControls: { type: Boolean, default: true },
+  /** 是否显示百度地图原生比例尺与缩放控件 */
+  showNativeControls: { type: Boolean, default: true },
+  /** 是否显示每个标记旁的文字标签 */
+  showMarkerLabels: { type: Boolean, default: true },
 })
 
 const emit = defineEmits([
@@ -185,8 +193,10 @@ async function initMap() {
     mapInstance.centerAndZoom(centerPoint, props.zoom)
 
     // 控件
-    mapInstance.addControl(new BMapGL.ScaleControl())
-    mapInstance.addControl(new BMapGL.ZoomControl())
+    if (props.showNativeControls) {
+      mapInstance.addControl(new BMapGL.ScaleControl())
+      mapInstance.addControl(new BMapGL.ZoomControl())
+    }
 
     // 用户手动拖动后，视野控制权交给用户，后续数据刷新不再自动回正
     mapInstance.addEventListener('dragstart', onUserDragStart)
@@ -333,7 +343,7 @@ function renderMarkers() {
       overlayMarkers.push(marker)
 
       // 信息窗口
-      if (m.label) {
+      if (m.label && props.showMarkerLabels) {
         const label = new BMapGL.Label(m.label, {
           position: point,
           offset: new BMapGL.Size(10, -25),
@@ -393,6 +403,25 @@ function zoomIn() {
 function zoomOut() {
   if (mapInstance) mapInstance.zoomOut()
 }
+
+/**
+ * 由父页面主动定位到指定点。该动作代表用户明确选择记录，
+ * 因此允许覆盖之前的手动拖动位置；后续轮询仍不会自动回正。
+ */
+function focusPoint(lng, lat, zoom = 16) {
+  if (!mapInstance || !isFinite(lng) || !isFinite(lat)) return
+  const BMapGL = window.BMapGL
+  if (!BMapGL) return
+  const point = new BMapGL.Point(Number(lng), Number(lat))
+  if (isFinite(zoom)) {
+    mapInstance.centerAndZoom(point, Number(zoom))
+  } else {
+    mapInstance.panTo(point)
+  }
+  userAdjustedViewport = true
+}
+
+defineExpose({ focusPoint, zoomIn, zoomOut })
 
 // ====== 卡片点击 ======
 function handleCardClick() {

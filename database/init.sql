@@ -1,387 +1,593 @@
 -- ============================================================
--- 交通事故风险智能识别与调度系统 - 数据库初始化脚本
--- 基于全部 12 个 JPA Entity 自动生成，兼容 MySQL 5.7+ / H2
--- 生成时间: 2026-07-09
+-- init.sql
+-- 道路交通事故风险预估与后果预测平台
+-- MySQL 8.x
+-- 依据当前 Spring Boot / JPA 实体重写
 -- ============================================================
 
-CREATE DATABASE IF NOT EXISTS traffic_risk_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE traffic_risk_db;
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
 
+CREATE DATABASE IF NOT EXISTS `traffic_risk_db`
+  DEFAULT CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
 
--- ============================================================
--- 1. 系统用户表 (app_users)
--- JPA: UserAccount extends AuditableEntity
--- 角色: FIELD_OFFICER / COMMAND_CENTER / RESCUE_WORKER / ADMIN
--- ============================================================
-CREATE TABLE IF NOT EXISTS app_users (
-    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
-    full_name        VARCHAR(64)  NOT NULL COMMENT '姓名',
-    username         VARCHAR(64)  NOT NULL UNIQUE COMMENT '登录用户名',
-    phone            VARCHAR(32)  NULL     COMMENT '手机号',
-    email            VARCHAR(128) NULL     COMMENT '邮箱',
-    role             VARCHAR(32)  NOT NULL COMMENT '角色: FIELD_OFFICER/COMMAND_CENTER/RESCUE_WORKER/ADMIN',
-    status           VARCHAR(32)  NOT NULL DEFAULT 'ENABLED' COMMENT '状态: ENABLED/DISABLED',
-    rescue_center_id BIGINT       NULL     COMMENT '所属清障/救援中心ID',
-    password_hash    VARCHAR(255) NOT NULL COMMENT '密码哈希 (sha256:xxx)',
-    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_role (role),
-    INDEX idx_status (status),
-    INDEX idx_rescue_center (rescue_center_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户';
+USE `traffic_risk_db`;
 
+-- 按依赖关系反向删除旧表
+DROP TABLE IF EXISTS `dispatch_decisions`;
+DROP TABLE IF EXISTS `clearance_rescue_advices`;
+DROP TABLE IF EXISTS `dispatch_tasks`;
+DROP TABLE IF EXISTS `incident_attachments`;
+DROP TABLE IF EXISTS `prediction_results`;
+DROP TABLE IF EXISTS `notification_records`;
+DROP TABLE IF EXISTS `operation_logs`;
+DROP TABLE IF EXISTS `emergency_vehicles`;
+DROP TABLE IF EXISTS `rescue_centers`;
+DROP TABLE IF EXISTS `incidents`;
+DROP TABLE IF EXISTS `system_data`;
+DROP TABLE IF EXISTS `items`;
+DROP TABLE IF EXISTS `app_users`;
 
 -- ============================================================
--- 2. 事故事件表 (incidents) ★ 核心
--- JPA: Incident extends AuditableEntity
+-- 1. 用户账户
+-- 对应实体：UserAccount
 -- ============================================================
-CREATE TABLE IF NOT EXISTS incidents (
-    id                              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    incident_no                     VARCHAR(40)  NOT NULL UNIQUE COMMENT '事故编号 (ACC20260707...)',
+CREATE TABLE `app_users` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `full_name` VARCHAR(64) NOT NULL,
+  `username` VARCHAR(64) NOT NULL,
+  `phone` VARCHAR(32) NULL,
+  `email` VARCHAR(128) NULL,
+  `role` VARCHAR(32) NOT NULL,
+  `status` VARCHAR(32) NOT NULL,
+  `password_hash` VARCHAR(255) NOT NULL,
+  `email_verified` TINYINT(1) NOT NULL,
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
 
-    -- 事故基本信息
-    location_name                   VARCHAR(160) NOT NULL COMMENT '事故地点名称',
-    address                         VARCHAR(255) NULL     COMMENT '详细地址',
-    road_name                       VARCHAR(80)  NULL     COMMENT '路段名',
-    initial_accident_type           VARCHAR(80)  NULL     COMMENT '初始事故类型',
-    confirmed_accident_type         VARCHAR(80)  NULL     COMMENT '确认事故类型',
-    scene_labels                    VARCHAR(500) NULL     COMMENT '照片/视频识别出的场景标签，逗号分隔',
-    description                     VARCHAR(1000) NOT NULL COMMENT '事故描述',
+  PRIMARY KEY (`id`),
 
-    -- 坐标信息 (原始 + 百度转换)
-    longitude                       DOUBLE       NULL     COMMENT '原始经度',
-    latitude                        DOUBLE       NULL     COMMENT '原始纬度',
-    coordinate_type                 VARCHAR(16)  NULL     DEFAULT 'WGS84' COMMENT '坐标系: WGS84/GCJ02/BD09',
-    baidu_longitude                 DOUBLE       NULL     COMMENT '百度BD09经度',
-    baidu_latitude                  DOUBLE       NULL     COMMENT '百度BD09纬度',
-    map_formatted_address           VARCHAR(255) NULL     COMMENT '百度地图标准地址',
-    map_semantic_description        VARCHAR(500) NULL     COMMENT '百度地图语义描述',
+  UNIQUE KEY `uk_app_users_username` (`username`),
+  UNIQUE KEY `uk_app_users_email` (`email`),
 
-    -- 现场结构化信息
-    occupied_lanes                  INT          NULL     COMMENT '占道车道数',
-    traffic_flow                    INT          NULL     COMMENT '车流量评估值',
-    people_flow                     INT          NULL     COMMENT '行人流量评估值',
-    people_involved                 INT          NULL     COMMENT '涉及人数',
-    injured_count                   INT          NULL     COMMENT '受伤人数',
-    injury_reported                 TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '现场上报是否有人受伤',
-    injury_estimate                 VARCHAR(500) NULL     COMMENT '伤情预估描述',
-    weather                         VARCHAR(40)  NULL     COMMENT '天气状况',
-    road_level                      VARCHAR(40)  NULL     COMMENT '道路等级',
-    road_status                     VARCHAR(80)  NULL     COMMENT '路面状态',
-    casualty_detected               TINYINT(1)   NOT NULL DEFAULT 0 COMMENT 'AI是否检测到伤亡',
-
-    -- 状态与风险
-    status                          VARCHAR(32)  NOT NULL DEFAULT 'REPORTED' COMMENT '事故状态',
-    risk_level                      VARCHAR(32)  NULL     COMMENT '风险等级: LOW/MEDIUM/HIGH/CRITICAL',
-
-    -- AI预测摘要
-    predicted_congestion_minutes    INT          NULL     COMMENT '预计拥堵时长(分钟)',
-    predicted_recovery_minutes      INT          NULL     COMMENT '预计恢复时长(分钟)',
-    confidence                      DOUBLE       NULL     COMMENT '预测置信度 0.0~1.0',
-    suggestion                      VARCHAR(1000) NULL     COMMENT '处置建议',
-    explanation                     VARCHAR(1500) NULL     COMMENT 'AI分析说明',
-
-    -- 支援决策
-    support_required                TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否需要支援',
-    support_reason                  VARCHAR(500) NULL     COMMENT '支援判断依据',
-    support_decision_manual         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否人工修改',
-    support_decision_by_user_id     BIGINT       NULL     COMMENT '修改支援判断用户ID',
-    support_decision_at             DATETIME     NULL     COMMENT '修改支援判断时间',
-
-    -- 市民即时提示
-    citizen_immediate_advice        VARCHAR(1000) NULL     COMMENT '面向市民的安全提示',
-    estimated_police_arrival_minutes INT         NULL     COMMENT '预计交警到达(分钟)',
-    police_arrival_text             VARCHAR(160) NULL     COMMENT '交警到达描述',
-
-    -- 上报人
-    report_user_id                  BIGINT       NULL     COMMENT '上报用户ID',
-
-    created_at                      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at                      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_incident_no (incident_no),
-    INDEX idx_status (status),
-    INDEX idx_risk_level (risk_level),
-    INDEX idx_report_user (report_user_id),
-    INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交通事故记录 (核心表)';
+  KEY `idx_app_users_role_status` (`role`, `status`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 
 -- ============================================================
--- 3. 事故附件表 (incident_attachments)
--- JPA: IncidentAttachment extends AuditableEntity
+-- 2. 事故事件
+-- 对应实体：Incident
 -- ============================================================
-CREATE TABLE IF NOT EXISTS incident_attachments (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    incident_id         BIGINT       NOT NULL COMMENT '关联事故ID',
-    file_name           VARCHAR(255) NOT NULL COMMENT '存储文件名',
-    original_filename   VARCHAR(255) NOT NULL COMMENT '原始文件名',
-    content_type        VARCHAR(80)  NULL     COMMENT 'MIME类型',
-    attachment_type     VARCHAR(20)  NOT NULL DEFAULT 'OTHER' COMMENT 'PHOTO/VIDEO/OTHER',
-    file_path           VARCHAR(500) NOT NULL COMMENT '文件存储路径',
-    file_size           BIGINT       NULL     COMMENT '文件大小(字节)',
-    uploaded_by         BIGINT       NULL     COMMENT '上传用户ID',
-    recognition_status  VARCHAR(32)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/PROCESSING/COMPLETED/NOT_REQUIRED',
-    ai_detected_types   VARCHAR(200) NULL     COMMENT 'AI检测标签，逗号分隔',
-    ai_detection_json   LONGTEXT     NULL     COMMENT 'AI完整检测结果JSON，含bbox/confidence',
-    annotated_file_url  VARCHAR(500) NULL     COMMENT '带检测框的图片/视频地址',
-    reviewed            TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '指挥中心是否已查看',
-    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_incident_id (incident_id),
-    INDEX idx_recognition (recognition_status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='事故现场附件';
+CREATE TABLE `incidents` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
 
+  `incident_no` VARCHAR(40) NOT NULL,
 
--- ============================================================
--- 4. 调度任务表 (dispatch_tasks) ★ 核心
--- JPA: DispatchTask extends AuditableEntity
--- 包含完整的车辆调度与轨迹追踪字段
--- ============================================================
-CREATE TABLE IF NOT EXISTS dispatch_tasks (
-    id                              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    task_no                         VARCHAR(40)  NOT NULL UNIQUE COMMENT '任务编号',
-    incident_id                     BIGINT       NOT NULL COMMENT '关联事故ID',
-    task_type                       VARCHAR(32)  NOT NULL COMMENT '任务类型: RESCUE/AMBULANCE/POLICE/ENGINEERING',
-    receiver_user_id                BIGINT       NULL     COMMENT '接收人用户ID',
-    assigned_by_user_id             BIGINT       NULL     COMMENT '指派人用户ID',
-    rescue_center_id                BIGINT       NULL     COMMENT '清障中心ID',
+  `location_name` VARCHAR(160) NOT NULL,
+  `address` VARCHAR(255) NULL,
 
-    -- 车辆调度
-    vehicle_required                TINYINT(1)   NULL     COMMENT '是否需要车辆',
-    vehicle_type                    VARCHAR(80)  NULL     COMMENT '车辆类型',
-    emergency_vehicle_id            BIGINT       NULL     COMMENT '调度车辆ID (FK → emergency_vehicles)',
-    emergency_vehicle_no            VARCHAR(40)  NULL     COMMENT '车辆编号 (冗余)',
-    emergency_vehicle_name          VARCHAR(80)  NULL     COMMENT '车辆名称 (冗余)',
+  `longitude` DOUBLE NULL,
+  `latitude` DOUBLE NULL,
 
-    -- 位置信息
-    location_name                   VARCHAR(160) NULL     COMMENT '事故地点名称',
-    risk_level                      VARCHAR(32)  NULL     COMMENT '风险等级',
+  `coordinate_type` VARCHAR(16) NULL,
 
-    -- 车辆起止点坐标 (原始 WGS84)
-    vehicle_start_longitude         DOUBLE       NULL     COMMENT '车辆起始经度',
-    vehicle_start_latitude          DOUBLE       NULL     COMMENT '车辆起始纬度',
-    vehicle_start_baidu_longitude   DOUBLE       NULL     COMMENT '车辆起始百度经度',
-    vehicle_start_baidu_latitude    DOUBLE       NULL     COMMENT '车辆起始百度纬度',
+  `baidu_longitude` DOUBLE NULL,
+  `baidu_latitude` DOUBLE NULL,
 
-    -- 事故目标点坐标
-    incident_target_longitude       DOUBLE       NULL     COMMENT '事故目标经度',
-    incident_target_latitude        DOUBLE       NULL     COMMENT '事故目标纬度',
-    incident_target_baidu_longitude DOUBLE       NULL     COMMENT '事故目标百度经度',
-    incident_target_baidu_latitude  DOUBLE       NULL     COMMENT '事故目标百度纬度',
+  `map_formatted_address` VARCHAR(255) NULL,
+  `map_semantic_description` VARCHAR(500) NULL,
 
-    -- 轨迹计算
-    dispatch_distance_km            DOUBLE       NULL     COMMENT '调度距离(公里)',
-    dispatch_speed_kmh              DOUBLE       NULL     COMMENT '调度速度(km/h)',
-    estimated_arrival_minutes       INT          NULL     COMMENT '预计到达时间(分钟)',
+  `road_name` VARCHAR(80) NULL,
 
-    -- 处置信息
-    advice                          VARCHAR(1000) NULL     COMMENT '处置建议',
-    feedback                        VARCHAR(1000) NULL     COMMENT '处置反馈',
+  `initial_accident_type` VARCHAR(80) NULL,
+  `confirmed_accident_type` VARCHAR(80) NULL,
 
-    -- 状态与时间
-    status                          VARCHAR(32)  NOT NULL DEFAULT 'DISPATCHED' COMMENT '调度状态',
-    departed_at                     DATETIME     NULL     COMMENT '出发时间',
-    arrived_at                      DATETIME     NULL     COMMENT '到达时间',
-    completed_at                    DATETIME     NULL     COMMENT '完成时间',
+  `description` VARCHAR(1000) NOT NULL,
 
-    created_at                      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at                      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_incident (incident_id),
-    INDEX idx_receiver (receiver_user_id),
-    INDEX idx_status (status),
-    INDEX idx_vehicle (emergency_vehicle_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='调度任务';
+  `occupied_lanes` INT NULL,
+  `traffic_flow` INT NULL,
+  `people_flow` INT NULL,
+
+  `people_involved` INT NULL,
+  `injured_count` INT NULL,
+  `injury_estimate` VARCHAR(500) NULL,
+
+  `weather` VARCHAR(40) NULL,
+  `road_level` VARCHAR(40) NULL,
+  `road_status` VARCHAR(80) NULL,
+
+  `status` VARCHAR(32) NOT NULL,
+  `risk_level` VARCHAR(32) NULL,
+
+  `predicted_congestion_minutes` INT NULL,
+  `predicted_recovery_minutes` INT NULL,
+
+  `confidence` DOUBLE NULL,
+
+  `suggestion` VARCHAR(1000) NULL,
+  `explanation` VARCHAR(1500) NULL,
+
+  `support_required` TINYINT(1) NOT NULL,
+  `support_reason` VARCHAR(500) NULL,
+
+  `support_decision_manual` TINYINT(1) NOT NULL,
+  `support_decision_by_user_id` BIGINT NULL,
+  `support_decision_at` DATETIME(6) NULL,
+
+  `citizen_immediate_advice` VARCHAR(1000) NULL,
+
+  `casualty_detected` TINYINT(1) NOT NULL,
+
+  `estimated_police_arrival_minutes` INT NULL,
+  `police_arrival_text` VARCHAR(160) NULL,
+
+  `report_user_id` BIGINT NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY `uk_incidents_incident_no` (`incident_no`),
+
+  KEY `idx_incidents_status` (`status`),
+  KEY `idx_incidents_risk_level` (`risk_level`),
+  KEY `idx_incidents_report_user_id` (`report_user_id`),
+  KEY `idx_incidents_created_at` (`created_at`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 
 -- ============================================================
--- 5. 应急车辆表 (emergency_vehicles)
--- JPA: EmergencyVehicle extends AuditableEntity
+-- 3. 事故附件
+-- 对应实体：IncidentAttachment
 -- ============================================================
-CREATE TABLE IF NOT EXISTS emergency_vehicles (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    vehicle_no          VARCHAR(40)  NOT NULL UNIQUE COMMENT '车辆编号',
-    vehicle_name        VARCHAR(80)  NOT NULL COMMENT '车辆名称',
-    vehicle_type        VARCHAR(32)  NOT NULL COMMENT '车辆类型: AMBULANCE/CLEARANCE_TRUCK/TOW_TRUCK/FIRE_TRUCK',
-    status              VARCHAR(32)  NOT NULL DEFAULT 'AVAILABLE' COMMENT 'AVAILABLE/DISPATCHED/MAINTENANCE',
+CREATE TABLE `incident_attachments` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
 
-    -- 当前位置坐标
-    longitude           DOUBLE       NULL     COMMENT '当前经度 (WGS84)',
-    latitude            DOUBLE       NULL     COMMENT '当前纬度 (WGS84)',
-    coordinate_type     VARCHAR(16)  NULL     DEFAULT 'WGS84' COMMENT '坐标系类型',
-    baidu_longitude     DOUBLE       NULL     COMMENT '百度BD09经度',
-    baidu_latitude      DOUBLE       NULL     COMMENT '百度BD09纬度',
-    speed_kmh           DOUBLE       NULL     COMMENT '当前时速(km/h)',
-    current_address     VARCHAR(255) NULL     COMMENT '当前地址描述',
+  `incident_id` BIGINT NOT NULL,
 
-    -- 任务绑定
-    current_task_id     BIGINT       NULL     COMMENT '当前绑定调度任务ID',
-    remark              VARCHAR(500) NULL     COMMENT '备注',
+  `file_name` VARCHAR(255) NOT NULL,
+  `original_filename` VARCHAR(255) NOT NULL,
 
-    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_vehicle_no (vehicle_no),
-    INDEX idx_status (status),
-    INDEX idx_vehicle_type (vehicle_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应急车辆';
+  `content_type` VARCHAR(80) NULL,
 
+  `attachment_type` VARCHAR(20) NOT NULL,
 
--- ============================================================
--- 6. 清障救援中心表 (rescue_centers) ★ 指挥中心
--- JPA: RescueCenter extends AuditableEntity
--- ============================================================
-CREATE TABLE IF NOT EXISTS rescue_centers (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name            VARCHAR(120) NOT NULL COMMENT '中心名称',
-    center_type     VARCHAR(32)  NOT NULL COMMENT '类型: CLEARANCE/RESCUE/MAINTENANCE',
-    address         VARCHAR(255) NULL     COMMENT '中心地址',
-    longitude       DOUBLE       NULL     COMMENT '经度',
-    latitude        DOUBLE       NULL     COMMENT '纬度',
-    phone           VARCHAR(32)  NULL     COMMENT '联系电话',
-    status          VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE/INACTIVE',
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_status (status),
-    INDEX idx_center_type (center_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='清障救援中心';
+  `file_path` VARCHAR(500) NOT NULL,
+  `file_size` BIGINT NULL,
+
+  `uploaded_by` BIGINT NULL,
+
+  `recognition_status` VARCHAR(32) NOT NULL,
+
+  `ai_detected_types` VARCHAR(200) NULL,
+  `ai_detection_json` LONGTEXT NULL,
+
+  `reviewed` TINYINT(1) NOT NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_incident_attachments_incident_id` (`incident_id`),
+  KEY `idx_incident_attachments_uploaded_by` (`uploaded_by`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 
 -- ============================================================
--- 7. 指挥调度决策表 (dispatch_decisions) ★ 指挥中心核心
--- JPA: DispatchDecision extends AuditableEntity
+-- 4. 预测结果
+-- 对应实体：PredictionResult
+-- ============================================================
+CREATE TABLE `prediction_results` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `incident_id` BIGINT NOT NULL,
+
+  `accident_type` VARCHAR(80) NOT NULL,
+
+  `risk_level` VARCHAR(32) NOT NULL,
+  `risk_score` DOUBLE NULL,
+
+  `congestion_duration_minutes` INT NULL,
+  `recovery_duration_minutes` INT NULL,
+
+  `confidence` DOUBLE NULL,
+
+  `model_version` VARCHAR(40) NULL,
+
+  `suggestions` VARCHAR(1000) NULL,
+  `explanation` VARCHAR(1500) NULL,
+  `risk_factors` VARCHAR(1000) NULL,
+
+  `image_evidence` VARCHAR(1000) NULL,
+  `evidence_summary` VARCHAR(1000) NULL,
+
+  `data_module_trace_id` VARCHAR(80) NULL,
+
+  `raw_result` VARCHAR(3000) NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_prediction_results_incident_id_created_at`
+    (`incident_id`, `created_at`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 5. 调度任务
+-- 对应实体：DispatchTask
+-- ============================================================
+CREATE TABLE `dispatch_tasks` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `task_no` VARCHAR(40) NOT NULL,
+
+  `incident_id` BIGINT NOT NULL,
+
+  `task_type` VARCHAR(32) NOT NULL,
+
+  `receiver_user_id` BIGINT NULL,
+  `assigned_by_user_id` BIGINT NULL,
+
+  `status` VARCHAR(32) NOT NULL,
+
+  `vehicle_required` TINYINT(1) NULL,
+  `vehicle_type` VARCHAR(80) NULL,
+
+  `location_name` VARCHAR(160) NULL,
+
+  `risk_level` VARCHAR(32) NULL,
+
+  `advice` VARCHAR(1000) NULL,
+  `feedback` VARCHAR(1000) NULL,
+
+  `completed_at` DATETIME(6) NULL,
+
+  `emergency_vehicle_id` BIGINT NULL,
+  `emergency_vehicle_no` VARCHAR(40) NULL,
+  `emergency_vehicle_name` VARCHAR(80) NULL,
+
+  `vehicle_start_longitude` DOUBLE NULL,
+  `vehicle_start_latitude` DOUBLE NULL,
+
+  `vehicle_start_baidu_longitude` DOUBLE NULL,
+  `vehicle_start_baidu_latitude` DOUBLE NULL,
+
+  `incident_target_longitude` DOUBLE NULL,
+  `incident_target_latitude` DOUBLE NULL,
+
+  `incident_target_baidu_longitude` DOUBLE NULL,
+  `incident_target_baidu_latitude` DOUBLE NULL,
+
+  `dispatch_distance_km` DOUBLE NULL,
+  `dispatch_speed_kmh` DOUBLE NULL,
+
+  `estimated_arrival_minutes` INT NULL,
+
+  `departed_at` DATETIME(6) NULL,
+  `arrived_at` DATETIME(6) NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY `uk_dispatch_tasks_task_no` (`task_no`),
+
+  KEY `idx_dispatch_tasks_incident_id` (`incident_id`),
+
+  KEY `idx_dispatch_tasks_receiver_status`
+    (`receiver_user_id`, `status`),
+
+  KEY `idx_dispatch_tasks_status` (`status`),
+
+  KEY `idx_dispatch_tasks_vehicle_status`
+    (`emergency_vehicle_id`, `status`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 6. 应急车辆
+-- 对应实体：EmergencyVehicle
+-- ============================================================
+CREATE TABLE `emergency_vehicles` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `vehicle_no` VARCHAR(40) NOT NULL,
+  `vehicle_name` VARCHAR(80) NOT NULL,
+
+  `vehicle_type` VARCHAR(32) NOT NULL,
+  `status` VARCHAR(32) NOT NULL,
+
+  `longitude` DOUBLE NULL,
+  `latitude` DOUBLE NULL,
+
+  `coordinate_type` VARCHAR(16) NULL,
+
+  `baidu_longitude` DOUBLE NULL,
+  `baidu_latitude` DOUBLE NULL,
+
+  `speed_kmh` DOUBLE NULL,
+
+  `current_address` VARCHAR(255) NULL,
+
+  `current_task_id` BIGINT NULL,
+
+  `remark` VARCHAR(500) NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY `uk_emergency_vehicles_vehicle_no` (`vehicle_no`),
+
+  KEY `idx_emergency_vehicles_type_status`
+    (`vehicle_type`, `status`),
+
+  KEY `idx_emergency_vehicles_status` (`status`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 7. AI 清障救援建议
+-- 对应实体：ClearanceRescueAdvice
+-- ============================================================
+CREATE TABLE `clearance_rescue_advices` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `incident_id` BIGINT NOT NULL,
+
+  `prediction_result_id` BIGINT NOT NULL,
+
+  `ai_advice` VARCHAR(4000) NOT NULL,
+  `final_advice` VARCHAR(4000) NULL,
+
+  `status` VARCHAR(32) NOT NULL,
+
+  `generation_source` VARCHAR(32) NOT NULL,
+
+  `modified_by_command` TINYINT(1) NULL,
+
+  `confirmed_by_user_id` BIGINT NULL,
+  `confirmed_at` DATETIME(6) NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_clearance_advices_incident_created`
+    (`incident_id`, `created_at`),
+
+  KEY `idx_clearance_advices_incident_status_confirmed`
+    (`incident_id`, `status`, `confirmed_at`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 8. 指挥调度决策
+-- 对应实体：DispatchDecision
+-- ============================================================
+CREATE TABLE `dispatch_decisions` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `incident_id` BIGINT NOT NULL,
+
+  `command_user_id` BIGINT NOT NULL,
+
+  `rescue_user_id` BIGINT NULL,
+  `rescue_center_id` BIGINT NULL,
+
+  `dispatch_task_id` BIGINT NULL,
+
+  `agent_content` LONGTEXT NULL,
+
+  `decision_summary` VARCHAR(1000) NULL,
+
+  `decision_type` VARCHAR(16) NOT NULL,
+
+  `status` VARCHAR(16) NOT NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_dispatch_decisions_incident_created`
+    (`incident_id`, `created_at`),
+
+  KEY `idx_dispatch_decisions_command_created`
+    (`command_user_id`, `created_at`),
+
+  KEY `idx_dispatch_decisions_rescue_created`
+    (`rescue_user_id`, `created_at`),
+
+  KEY `idx_dispatch_decisions_task_id`
+    (`dispatch_task_id`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 9. 救援中心
+-- 对应实体：RescueCenter
+-- ============================================================
+CREATE TABLE `rescue_centers` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `name` VARCHAR(120) NOT NULL,
+
+  `center_type` VARCHAR(32) NOT NULL,
+
+  `address` VARCHAR(255) NULL,
+
+  `longitude` DOUBLE NULL,
+  `latitude` DOUBLE NULL,
+
+  `phone` VARCHAR(32) NULL,
+
+  `status` VARCHAR(32) NOT NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_rescue_centers_status` (`status`),
+  KEY `idx_rescue_centers_type` (`center_type`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 10. 通知记录
+-- 对应实体：NotificationRecord
+-- ============================================================
+CREATE TABLE `notification_records` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `receiver_user_id` BIGINT NULL,
+
+  `channel` VARCHAR(32) NOT NULL,
+
+  `title` VARCHAR(160) NOT NULL,
+
+  `content` VARCHAR(1000) NOT NULL,
+
+  `status` VARCHAR(32) NOT NULL,
+
+  `failure_reason` VARCHAR(500) NULL,
+
+  `sent_at` DATETIME(6) NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_notification_records_receiver_user_id`
+    (`receiver_user_id`),
+
+  KEY `idx_notification_records_status`
+    (`status`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 11. 操作日志
+-- 对应实体：OperationLog
+-- ============================================================
+CREATE TABLE `operation_logs` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `operator_user_id` BIGINT NULL,
+
+  `operation_type` VARCHAR(80) NOT NULL,
+
+  `object_type` VARCHAR(80) NOT NULL,
+
+  `object_id` VARCHAR(80) NULL,
+
+  `ip_address` VARCHAR(80) NULL,
+
+  `detail` VARCHAR(1000) NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  KEY `idx_operation_logs_operation_type_created`
+    (`operation_type`, `created_at`),
+
+  KEY `idx_operation_logs_operator_user_id`
+    (`operator_user_id`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 12. 系统字典与配置
+-- 对应实体：SystemData
 --
--- 五维外键关联:
---   incident_id      → incidents.id         (事故现场事件主键)
---   command_user_id  → app_users.id         (指挥人员主键)
---   rescue_user_id   → app_users.id         (清障人员主键)
---   rescue_center_id → rescue_centers.id    (清障中心主键)
---   dispatch_task_id → dispatch_tasks.id    (关联调度任务)
+-- 注意：
+-- Java 字段名为 value
+-- 但通过 @Column(name = "config_value")
+-- 映射到数据库中的 config_value
 -- ============================================================
-CREATE TABLE IF NOT EXISTS dispatch_decisions (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    incident_id         BIGINT       NOT NULL COMMENT '事故现场事件主键',
-    command_user_id     BIGINT       NOT NULL COMMENT '指挥人员主键',
-    rescue_user_id      BIGINT       NULL     COMMENT '清障人员主键',
-    rescue_center_id    BIGINT       NULL     COMMENT '清障中心主键',
-    dispatch_task_id    BIGINT       NULL     COMMENT '关联调度任务ID',
+CREATE TABLE `system_data` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
 
-    -- AI Agent 内容 (核心)
-    agent_content       TEXT         NULL     COMMENT 'AI Agent 指挥调度分析建议 (LONGFORM TEXT)',
+  `category` VARCHAR(32) NOT NULL,
 
-    -- 人工决策
-    decision_summary    VARCHAR(1000) NULL     COMMENT '人工决策摘要',
-    decision_type       VARCHAR(16)  NOT NULL DEFAULT 'HYBRID' COMMENT 'AUTO/MANUAL/HYBRID',
-    status              VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT/ISSUED/EXECUTED/CLOSED',
+  `code` VARCHAR(80) NOT NULL,
 
-    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_incident (incident_id),
-    INDEX idx_command_user (command_user_id),
-    INDEX idx_rescue_user (rescue_user_id),
-    INDEX idx_rescue_center (rescue_center_id),
-    INDEX idx_dispatch_task (dispatch_task_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='指挥调度决策 (含AI Agent分析内容)';
+  `name` VARCHAR(160) NOT NULL,
 
+  `config_value` VARCHAR(2000) NULL,
 
--- ============================================================
--- 8. AI 预测结果表 (prediction_results)
--- JPA: PredictionResult extends AuditableEntity
--- ============================================================
-CREATE TABLE IF NOT EXISTS prediction_results (
-    id                          BIGINT AUTO_INCREMENT PRIMARY KEY,
-    incident_id                 BIGINT       NOT NULL COMMENT '关联事故ID',
-    accident_type               VARCHAR(80)  NOT NULL COMMENT '识别事故类型',
-    risk_level                  VARCHAR(32)  NOT NULL COMMENT '风险等级',
-    risk_score                  DOUBLE       NULL     COMMENT '风险评分',
-    congestion_duration_minutes INT          NULL     COMMENT '预计拥堵时长(分钟)',
-    recovery_duration_minutes   INT          NULL     COMMENT '预计恢复时长(分钟)',
-    confidence                  DOUBLE       NULL     COMMENT '可信度 0.0~1.0',
-    model_version               VARCHAR(40)  NULL     COMMENT '模型版本',
-    suggestions                 VARCHAR(1000) NULL     COMMENT '处置建议',
-    explanation                 VARCHAR(1500) NULL     COMMENT 'AI分析说明',
-    risk_factors                VARCHAR(1000) NULL     COMMENT '风险因子',
-    image_evidence              VARCHAR(1000) NULL     COMMENT '图片证据描述',
-    evidence_summary            VARCHAR(1000) NULL     COMMENT '证据摘要',
-    data_module_trace_id        VARCHAR(80)  NULL     COMMENT '数据模块追踪ID',
-    raw_result                  VARCHAR(3000) NULL     COMMENT '原始预测结果(JSON)',
-    created_at                  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at                  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_incident_id (incident_id),
-    INDEX idx_risk_level (risk_level)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI预测分析结果';
+  `description` VARCHAR(1000) NULL,
+
+  `enabled` TINYINT(1) NOT NULL,
+
+  `sort_order` INT NULL,
+
+  `created_at` DATETIME(6) NULL,
+  `updated_at` DATETIME(6) NULL,
+
+  PRIMARY KEY (`id`),
+
+  UNIQUE KEY `uk_system_data_category_code`
+    (`category`, `code`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 
 -- ============================================================
--- 9. 操作日志表 (operation_logs)
--- JPA: OperationLog extends AuditableEntity
+-- 13. 示例 Item 表
+-- 对应实体：Item
 -- ============================================================
-CREATE TABLE IF NOT EXISTS operation_logs (
-    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
-    operator_user_id BIGINT       NULL     COMMENT '操作用户ID',
-    operation_type   VARCHAR(80)  NOT NULL COMMENT '操作类型',
-    object_type      VARCHAR(80)  NOT NULL COMMENT '操作对象类型',
-    object_id        VARCHAR(80)  NULL     COMMENT '操作对象ID',
-    ip_address       VARCHAR(80)  NULL     COMMENT 'IP地址',
-    detail           VARCHAR(1000) NULL     COMMENT '操作详情',
-    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_operator (operator_user_id),
-    INDEX idx_object_type (object_type),
-    INDEX idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统操作日志';
+CREATE TABLE `items` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+
+  `name` VARCHAR(255) NOT NULL,
+
+  `description` VARCHAR(500) NULL,
+
+  `created_at` DATETIME(6) NOT NULL,
+
+  `updated_at` DATETIME(6) NOT NULL,
+
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4
+  COLLATE=utf8mb4_unicode_ci;
 
 
--- ============================================================
--- 10. 通知记录表 (notification_records)
--- JPA: NotificationRecord extends AuditableEntity
--- ============================================================
-CREATE TABLE IF NOT EXISTS notification_records (
-    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
-    receiver_user_id BIGINT       NULL     COMMENT '接收用户ID',
-    channel          VARCHAR(32)  NOT NULL COMMENT '通知渠道: EMAIL/SMS/PUSH',
-    title            VARCHAR(160) NOT NULL COMMENT '通知标题',
-    content          VARCHAR(1000) NOT NULL COMMENT '通知内容',
-    status           VARCHAR(32)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/SENT/FAILED',
-    failure_reason   VARCHAR(500) NULL     COMMENT '失败原因',
-    sent_at          DATETIME     NULL     COMMENT '发送时间',
-    created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_receiver (receiver_user_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='通知发送记录';
-
-
--- ============================================================
--- 11. 系统数据字典表 (system_data)
--- JPA: SystemData extends AuditableEntity
--- UNIQUE(category, code) 约束
--- 用途: 道路等级、风险规则、事故类型字典等结构化配置
--- ============================================================
-CREATE TABLE IF NOT EXISTS system_data (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    category        VARCHAR(32)  NOT NULL COMMENT '分类: ROAD/ACCIDENT_TYPE/RISK_RULE',
-    code            VARCHAR(80)  NOT NULL COMMENT '编码',
-    name            VARCHAR(160) NOT NULL COMMENT '名称',
-    config_value    VARCHAR(2000) NULL     COMMENT '配置值 (JSON/文本)',
-    description     VARCHAR(1000) NULL     COMMENT '描述',
-    enabled         TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否启用',
-    sort_order      INT          NOT NULL DEFAULT 0 COMMENT '排序',
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_system_data_category_code (category, code),
-    INDEX idx_category (category),
-    INDEX idx_enabled (enabled)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统数据字典';
-
-
--- ============================================================
--- 12. 物品表 (items)
--- JPA: Item (standalone entity, not extending AuditableEntity)
--- ============================================================
-CREATE TABLE IF NOT EXISTS items (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name            VARCHAR(255) NOT NULL COMMENT '物品名称',
-    description     VARCHAR(500) NULL     COMMENT '描述',
-    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统物品';
+SET FOREIGN_KEY_CHECKS = 1;

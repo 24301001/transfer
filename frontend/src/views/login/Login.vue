@@ -27,11 +27,6 @@
         </el-input>
       </el-form-item>
 
-      <!-- 滑块验证码 -->
-      <el-form-item class="lf-item lf-captcha-item">
-        <SliderCaptcha ref="sliderRef" @verified="onSliderVerified" @error="onSliderError" />
-      </el-form-item>
-
       <el-form-item class="lf-item lf-btn-wrap">
         <el-button type="primary" :loading="loading" native-type="submit" class="lf-submit">
           <span v-if="!loading">登 录</span>
@@ -62,6 +57,26 @@
         </button>
       </div>
     </div>
+
+    <!-- 滑块验证弹窗 -->
+    <el-dialog
+      v-model="showSliderDialog"
+      title="安全验证"
+      width="380px"
+      :close-on-click-modal="false"
+      @close="onSliderDialogClose"
+      class="slider-dialog"
+    >
+      <div class="slider-dialog-body">
+        <p class="slider-dialog-hint">拖动滑块完成拼图验证</p>
+        <SliderCaptcha
+          v-if="showSliderDialog"
+          ref="sliderRef"
+          @verified="onSliderVerified"
+          @error="onSliderError"
+        />
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -83,6 +98,7 @@ const sliderRef = ref(null)
 const loading = ref(false)
 const sliderVerified = ref(false)
 const sliderToken = ref('')
+const showSliderDialog = ref(false)
 
 const form = reactive({
   username: '',
@@ -97,10 +113,20 @@ const rules = {
 function onSliderVerified(token) {
   sliderVerified.value = true
   sliderToken.value = token
+  showSliderDialog.value = false
+  // 滑块验证通过，继续执行登录
+  doLogin()
 }
 
 function onSliderError(msg) {
   ElMessage.warning(msg || '验证码加载失败，请刷新重试')
+}
+
+function onSliderDialogClose() {
+  // 用户关闭弹窗时清空验证状态
+  if (!sliderVerified.value) {
+    sliderToken.value = ''
+  }
 }
 
 async function handleLogin() {
@@ -108,11 +134,17 @@ async function handleLogin() {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
-  if (!sliderVerified.value) {
-    ElMessage.warning('请先完成滑块验证')
+  // 快捷登录跳过滑块弹窗
+  if (sliderVerified.value) {
+    await doLogin()
     return
   }
 
+  // 弹出滑块验证对话框
+  showSliderDialog.value = true
+}
+
+async function doLogin() {
   loading.value = true
   try {
     const res = await login({
@@ -127,10 +159,10 @@ async function handleLogin() {
       router.push(role ? role.home : '/')
     }
   } catch {
-    // 登录失败时重置滑块
+    // 登录失败时重置滑块并重新弹出验证
     sliderVerified.value = false
     sliderToken.value = ''
-    sliderRef.value?.reset()
+    showSliderDialog.value = true
   } finally {
     loading.value = false
   }
@@ -236,14 +268,6 @@ onMounted(() => {
 .lf-btn-wrap {
   margin-top: 4px;
   margin-bottom: 0 !important;
-}
-
-.lf-captcha-item {
-  margin-bottom: 12px !important;
-
-  :deep(.el-form-item__content) {
-    width: 100%;
-  }
 }
 
 .lf-submit {
@@ -363,7 +387,49 @@ onMounted(() => {
   50% { opacity: 0.9; transform: scale(1.4); }
 }
 
+/* ====== 滑块验证弹窗 ====== */
+.slider-dialog {
+  :deep(.el-dialog__header) {
+    padding: 20px 24px 0;
+    margin-right: 0;
+
+    .el-dialog__title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+  }
+
+  :deep(.el-dialog__body) {
+    padding: 12px 24px 24px;
+  }
+
+  :deep(.el-dialog__headerbtn) {
+    top: 20px;
+    right: 20px;
+    font-size: 16px;
+  }
+}
+
+.slider-dialog-body {
+  text-align: center;
+}
+
+.slider-dialog-hint {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
 @media (max-width: 820px) {
   .lf-form .lf-item { margin-bottom: 14px; }
+
+  .slider-dialog {
+    :deep(.el-dialog) {
+      width: 92vw !important;
+      max-width: 380px;
+    }
+  }
 }
 </style>
