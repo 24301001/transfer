@@ -418,11 +418,53 @@ export async function createDispatch(data) {
   }
 }
 
+/**
+ * 获取清障人员任务详情和导航链接。
+ *
+ * currentPosition 不为空时，将清障人员当前 GPS 坐标传给后端，
+ * 由后端生成“当前位置 → 事故地点”的导航链接。
+ *
+ * 浏览器 Geolocation 返回的是 WGS84 坐标。
+ *
+ * @param {string|number} taskId 调度任务 ID
+ * @param {{lng: number, lat: number, coordinateType?: string}|null} currentPosition
+ */
 export async function getClearanceRescueDetail(
-  taskId
+  taskId,
+  currentPosition = null
 ) {
+  const config = {}
+
+  if (currentPosition) {
+    const longitude = Number(
+      currentPosition.lng
+    )
+
+    const latitude = Number(
+      currentPosition.lat
+    )
+
+    if (
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(latitude)
+    ) {
+      throw new Error(
+        '当前位置坐标无效'
+      )
+    }
+
+    config.params = {
+      longitude,
+      latitude,
+      coordinateType:
+        currentPosition.coordinateType ||
+        'WGS84',
+    }
+  }
+
   const res = await request.get(
-    `/v1/dispatch-tasks/${taskId}/clearance-rescue-detail`
+    `/v1/dispatch-tasks/${taskId}/clearance-rescue-detail`,
+    config
   )
 
   return {
@@ -430,6 +472,7 @@ export async function getClearanceRescueDetail(
     data: res.data,
   }
 }
+
 
 export async function updateDispatchStatus(
   data
