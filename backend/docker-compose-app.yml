@@ -1,0 +1,71 @@
+﻿services:
+  backend:
+    container_name: backend
+    restart: unless-stopped
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    ports:
+      - "8081:8080"
+
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+
+      # ============================
+      # MySQL
+      # ============================
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/traffic_risk_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: q20051113
+
+      # ============================
+      # Redis
+      # ============================
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_DATABASE: "0"
+      SPRING_DATA_REDIS_PASSWORD: change-this-redis-password
+
+      # ============================
+      # 事故预测 FastAPI
+      # ============================
+      APP_PREDICTION_MODULE_BASE_URL: http://host.docker.internal:8001
+      APP_PREDICTION_MODULE_HEALTH_PATH: /health
+
+      # ============================
+      # YOLO FastAPI
+      # ============================
+      APP_YOLO_BASE_URL: http://host.docker.internal:8000
+      APP_YOLO_HEALTH_PATH: /health
+
+      # ============================
+      # 上传目录
+      # ============================
+      APP_UPLOAD_DIR: /app/upload
+
+      # ============================
+      # YOLO 视频 H.264 转码
+      # ============================
+      APP_VIDEO_TRANSCODE_ENABLED: "true"
+      APP_ALGORITHM1_OUTPUT_DIR: /algorithm1/runs/api
+      APP_FFMPEG_PATH: /usr/bin/ffmpeg
+      APP_FFPROBE_PATH: /usr/bin/ffprobe
+      APP_VIDEO_TRANSCODE_TIMEOUT_SECONDS: "900"
+
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      FFPROBE_PATH: /usr/bin/ffprobe
+
+    volumes:
+      - ../upload:/app/upload
+      - ../algorithm1/runs/api:/algorithm1/runs/api
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

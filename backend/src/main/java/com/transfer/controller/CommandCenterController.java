@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,10 +12,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import com.transfer.dto.AiAttachmentResponse;
 import com.transfer.dto.CommandDispatchRequest;
 import com.transfer.dto.CommandIncidentDetailResponse;
 import com.transfer.dto.CommandIncidentSummaryResponse;
@@ -35,7 +40,6 @@ import com.transfer.enums.VehicleType;
 import com.transfer.model.DispatchTask;
 import com.transfer.model.EmergencyVehicle;
 import com.transfer.model.Incident;
-import com.transfer.model.IncidentAttachment;
 import com.transfer.security.RequestSecurityAttributes;
 import com.transfer.security.RequireRoles;
 import com.transfer.service.CommandCenterService;
@@ -390,10 +394,69 @@ public class CommandCenterController {
      * 返回所有已完成 AI 识别的附件及其检测结果。
      */
     @GetMapping("/incidents/{incidentId}/ai-attachments")
-    public List<IncidentAttachment> findAiAttachments(
-            @PathVariable Long incidentId
+    public List<AiAttachmentResponse> findAiAttachments(
+            @PathVariable Long incidentId,
+            HttpServletRequest request
     ) {
-        return commandCenterService.findAiDetectedAttachments(incidentId);
+        String accessToken = resolveBearerToken(request);
+
+        return commandCenterService
+                .findAiDetectedAttachments(incidentId)
+                .stream()
+                .map(attachment -> AiAttachmentResponse.from(
+                        attachment,
+                        buildAiAttachmentPlaybackUrl(
+                                incidentId,
+                                attachment.getId(),
+                                accessToken
+                        )
+                ))
+                .toList();
+    }
+
+    /**
+     * 通过后端代理输出 YOLO 处理后的图片/视频。
+     *
+     * <p>支持 Range 请求，视频标签可以分段加载并拖动播放进度。</p>
+     */
+    @GetMapping("/incidents/{incidentId}/ai-attachments/{attachmentId}/content")
+    public ResponseEntity<StreamingResponseBody> streamAiAttachment(
+            @PathVariable Long incidentId,
+            @PathVariable Long attachmentId,
+            @RequestHeader(
+                    value = HttpHeaders.RANGE,
+                    required = false
+            ) String rangeHeader
+    ) {
+        CommandCenterService.AiAttachmentMediaStream media =
+                commandCenterService.openAiAttachmentMedia(
+                        incidentId,
+                        attachmentId,
+                        rangeHeader
+                );
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.CONTENT_TYPE, media.contentType());
+        headers.set(HttpHeaders.ACCEPT_RANGES, media.acceptRanges());
+        headers.setCacheControl("private, max-age=60");
+
+        if (media.contentLength() >= 0) {
+            headers.setContentLength(media.contentLength());
+        }
+        if (media.contentRange() != null) {
+            headers.set(HttpHeaders.CONTENT_RANGE, media.contentRange());
+        }
+        if (media.etag() != null) {
+            headers.set(HttpHeaders.ETAG, media.etag());
+        }
+        if (media.lastModified() > 0) {
+            headers.setLastModified(media.lastModified());
+        }
+
+        return ResponseEntity
+                .status(media.statusCode())
+                .headers(headers)
+                .body(media.body());
     }
 
     /**
@@ -407,4 +470,39 @@ public class CommandCenterController {
         commandCenterService.markAttachmentReviewed(incidentId, attachmentId);
         return ResponseEntity.ok().build();
     }
+    private String buildAiAttachmentPlaybackUrl(
+            Long incidentId,
+            Long attachmentId,
+            String accessToken
+    ) {
+        return ServletUriComponentsBuilder
+                .fromCurrentContextPath()
+                .path("/api/v1/command-center/incidents/{incidentId}/ai-attachments/{attachmentId}/content")
+                .queryParam("access_token", accessToken)
+                .buildAndExpand(incidentId, attachmentId)
+                .encode()
+                .toUriString();
+    }
+
+    private String resolveBearerToken(
+            HttpServletRequest request
+    ) {
+        String authorization = request.getHeader(
+                HttpHeaders.AUTHORIZATION
+        );
+
+        if (authorization == null
+                || !authorization.regionMatches(
+                true,
+                0,
+                "Bearer ",
+                0,
+                7
+        )) {
+            return "";
+        }
+
+        return authorization.substring(7).trim();
+    }
+
 }

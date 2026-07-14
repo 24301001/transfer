@@ -56,3 +56,18 @@ backend/repair-existing-yolo-video-v2.ps1
 
  
  
+# Python runtime cache
+__pycache__/
+*.py[cod]
+
+# YOLO runtime files
+algorithm1/runs/api/images/
+algorithm1/runs/api/uploads/
+algorithm1/runs/api/videos/
+
+# Runtime uploads
+upload/
+
+# Local test files
+backend/yolo-test.mp4
+backend/repair-existing-yolo-video-v2.ps1

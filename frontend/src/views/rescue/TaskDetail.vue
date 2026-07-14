@@ -22,8 +22,8 @@
     >
       <el-row :gutter="16">
         <!-- 基本信息 -->
-        <el-col :xs="24" :sm="24" :md="24" :lg="16" class="left-col">
-          <div class="page-card left-card">
+        <el-col :span="16">
+          <div class="page-card">
             <div class="detail-header">
               <div>
                 <h2>
@@ -60,7 +60,7 @@
             <el-divider />
 
             <el-descriptions
-              :column="descColumns"
+              :column="2"
               border
             >
               <el-descriptions-item
@@ -106,21 +106,20 @@
               查询数据库中的车辆经纬度作为导航起点，
               再生成“救援车辆位置 → 事故地点”的导航路线。
             -->
-            <div class="map-wrapper">
-              <MapCard
-                height="100%"
-                :title="task.location?.name"
-                :hint="
-                  navigationLoading
-                    ? '正在读取调度车辆位置…'
-                    : '点击从调度车辆位置开始导航'
-                "
-                :markers="mapMarkers"
-                :center="mapCenter"
-                :zoom="15"
-                @click="handleNavigate"
-              />
-            </div>
+            <MapCard
+              :height="'200px'"
+              :title="task.location?.name"
+              :hint="
+                navigationLoading
+                  ? '正在读取调度车辆位置…'
+                  : '点击从调度车辆位置开始导航'
+              "
+              :markers="mapMarkers"
+              :center="mapCenter"
+              :zoom="15"
+              style="margin-top: 12px"
+              @click="handleNavigate"
+            />
 
             <div class="navigation-tip">
               <el-icon>
@@ -142,7 +141,7 @@
               </h3>
 
               <el-descriptions
-                :column="descColumns"
+                :column="2"
                 border
                 size="small"
               >
@@ -174,7 +173,7 @@
         </el-col>
 
         <!-- 右侧：现场风险、处置建议、状态更新 -->
-        <el-col :xs="24" :sm="24" :md="24" :lg="8" class="right-col">
+        <el-col :span="8">
           <!-- 现场风险 -->
           <div
             class="page-card"
@@ -444,7 +443,6 @@
 import {
   computed,
   onMounted,
-  onUnmounted,
   ref,
 } from 'vue'
 
@@ -517,13 +515,6 @@ const stepIndex = computed(() => {
 
   return map[task.value?.status] ?? 0
 })
-
-const isMobile = ref(false)
-const descColumns = computed(() => (isMobile.value ? 1 : 2))
-
-function updateMobileFlag() {
-  isMobile.value = window.matchMedia('(max-width: 768px)').matches
-}
 
 /**
  * 事故地点标记。
@@ -787,15 +778,7 @@ async function confirmComplete() {
   feedbackForm.value.feedback = ''
 }
 
-onMounted(() => {
-  updateMobileFlag()
-  window.addEventListener('resize', updateMobileFlag)
-  fetchDetail()
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateMobileFlag)
-})
+onMounted(fetchDetail)
 </script>
 
 <style lang="scss" scoped>
@@ -804,30 +787,6 @@ onUnmounted(() => {
 .task-detail-page {
   max-width: 1100px;
   margin: 0 auto;
-}
-
-.detail-row {
-  align-items: stretch;
-}
-
-.left-col {
-  display: flex;
-  flex-direction: column;
-}
-
-.left-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.map-wrapper {
-  flex: 1;
-  min-height: 350px;
-  margin-top: 12px;
-  border-radius: 10px;
-  overflow: hidden;
 }
 
 .back-bar {
@@ -1070,4 +1029,4 @@ onUnmounted(() => {
     max-width: 450px;
   }
 }
-</style>
+</style> 这是第三个文件。

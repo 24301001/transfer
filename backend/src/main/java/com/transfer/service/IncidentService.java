@@ -88,6 +88,7 @@ public class IncidentService {
     private final RealtimeService realtimeService;
     private final MapService mapService;
     private final YoloDetectClient yoloDetectClient;
+    private final VideoTranscodeService videoTranscodeService;
     private final Path uploadDir;
     private final boolean autoSubmitPredictionOnPublicReport;
     private final float yoloDefaultConf;
@@ -109,6 +110,7 @@ public class IncidentService {
             RealtimeService realtimeService,
             MapService mapService,
             YoloDetectClient yoloDetectClient,
+            VideoTranscodeService videoTranscodeService,
             @Value("${app.upload-dir:uploads}") String uploadDir,
             @Value("${app.incident.auto-submit-prediction-on-public-report:true}")
             boolean autoSubmitPredictionOnPublicReport,
@@ -130,6 +132,7 @@ public class IncidentService {
         this.realtimeService = realtimeService;
         this.mapService = mapService;
         this.yoloDetectClient = yoloDetectClient;
+        this.videoTranscodeService = videoTranscodeService;
         this.autoSubmitPredictionOnPublicReport =
                 autoSubmitPredictionOnPublicReport;
         this.yoloDefaultConf = yoloDefaultConf;
@@ -674,7 +677,11 @@ public class IncidentService {
                     if (result != null && result.success()) {
                         att.setAiDetectedTypes(String.join(",", result.accidentTypes()));
                         att.setAiDetectionJson(result.rawJson());
-                        att.setAnnotatedFileUrl(result.outputUrl());
+                        String browserCompatibleUrl =
+                                videoTranscodeService.ensureBrowserCompatible(
+                                        result.outputUrl()
+                                );
+                        att.setAnnotatedFileUrl(browserCompatibleUrl);
                         att.setRecognitionStatus("COMPLETED");
                         allAccidentTypes.addAll(result.accidentTypes());
                     } else {

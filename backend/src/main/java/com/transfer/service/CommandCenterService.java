@@ -1,20 +1,26 @@
 package com.transfer.service;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpHeaders;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
@@ -77,6 +83,10 @@ public class CommandCenterService {
     private final OperationLogService operationLogService;
     private final RealtimeService realtimeService;
 
+    private final String yoloBaseUrl;
+    private final int yoloConnectTimeout;
+    private final int yoloReadTimeout;
+
     public CommandCenterService(
             IncidentRepository incidentRepository,
             IncidentAttachmentRepository attachmentRepository,
@@ -88,7 +98,13 @@ public class CommandCenterService {
             MapService mapService,
             ClearanceRescueAdviceService clearanceRescueAdviceService,
             OperationLogService operationLogService,
-            RealtimeService realtimeService
+            RealtimeService realtimeService,
+            @Value("${app.yolo.base-url:http://localhost:8000}")
+            String yoloBaseUrl,
+            @Value("${app.yolo.connect-timeout:3000}")
+            int yoloConnectTimeout,
+            @Value("${app.yolo.read-timeout:30000}")
+            int yoloReadTimeout
     ) {
         this.incidentRepository = incidentRepository;
         this.attachmentRepository =
@@ -108,6 +124,9 @@ public class CommandCenterService {
         this.operationLogService =
                 operationLogService;
         this.realtimeService = realtimeService;
+        this.yoloBaseUrl = yoloBaseUrl;
+        this.yoloConnectTimeout = yoloConnectTimeout;
+        this.yoloReadTimeout = yoloReadTimeout;
     }
 
     /**
@@ -690,23 +709,279 @@ public class CommandCenterService {
 
     /**
      * 获取事故的 AI 检测附件列表（供指挥中心查看带检测框的图片/视频）。
-     * 返回满足以下条件之一的附件（确保前端有数据可看）：
-     * 1. recognitionStatus = COMPLETED 且 aiDetectedTypes 非空（标准 YOLO 处理完成）
-     * 2. annotatedFileUrl 非空（YOLO 已产出标注文件，即使状态尚未同步）
+     *
+     * <p>只返回照片或视频附件，并要求 YOLO 已处理完成且存在标注媒体地址。
+     * 是否识别到事故类别不作为展示条件，因为“未检测到类别”的视频也可能
+     * 已经成功生成可播放的标注结果。</p>
      */
-    public List<IncidentAttachment> findAiDetectedAttachments(Long incidentId) {
-        List<IncidentAttachment> attachments = attachmentRepository.findByIncidentId(incidentId);
-        List<IncidentAttachment> result = attachments.stream()
-                .filter(a -> "PHOTO".equals(a.getAttachmentType())
-                        || "VIDEO".equals(a.getAttachmentType()))
-                .filter(a -> ("COMPLETED".equals(a.getRecognitionStatus())
-                        && a.getAiDetectedTypes() != null && !a.getAiDetectedTypes().isBlank())
-                        || (a.getAnnotatedFileUrl() != null && !a.getAnnotatedFileUrl().isBlank()))
-                .collect(Collectors.toList());
-        log.info("事故 {} 共有 {} 个附件，筛选出 {} 个可展示的分析媒体",
-                incidentId, attachments.size(), result.size());
+    @Transactional(readOnly = true)
+    public List<IncidentAttachment> findAiDetectedAttachments(
+            Long incidentId
+    ) {
+        incidentService.findIncident(incidentId);
+
+        List<IncidentAttachment> attachments =
+                attachmentRepository
+                        .findByIncidentIdOrderByCreatedAtAsc(
+                                incidentId
+                        );
+
+        List<IncidentAttachment> result = attachments
+                .stream()
+                .filter(attachment ->
+                        "PHOTO".equals(
+                                attachment.getAttachmentType()
+                        )
+                                || "VIDEO".equals(
+                                attachment.getAttachmentType()
+                        )
+                )
+                .filter(attachment -> "COMPLETED".equals(
+                        attachment.getRecognitionStatus()
+                ))
+                .filter(attachment ->
+                        attachment.getAnnotatedFileUrl() != null
+                                && !attachment
+                                .getAnnotatedFileUrl()
+                                .isBlank()
+                )
+                .toList();
+
+        log.info(
+                "事故 {} 共有 {} 个附件，筛选出 {} 个可展示的分析媒体",
+                incidentId,
+                attachments.size(),
+                result.size()
+        );
+
         return result;
     }
+
+    /**
+     * 打开 YOLO 处理后的媒体流，并透传 Range 相关响应头。
+     */
+    @Transactional(readOnly = true)
+    public AiAttachmentMediaStream openAiAttachmentMedia(
+            Long incidentId,
+            Long attachmentId,
+            String rangeHeader
+    ) {
+        IncidentAttachment attachment = attachmentRepository
+                .findById(attachmentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Attachment not found: " + attachmentId
+                ));
+
+        if (!attachment.getIncidentId().equals(incidentId)) {
+            throw new BadRequestException(
+                    "Attachment does not belong to this incident"
+            );
+        }
+        if (!"COMPLETED".equals(attachment.getRecognitionStatus())
+                || attachment.getAnnotatedFileUrl() == null
+                || attachment.getAnnotatedFileUrl().isBlank()) {
+            throw new ResourceNotFoundException(
+                    "AI processed media is not available"
+            );
+        }
+        if (rangeHeader != null
+                && !rangeHeader.isBlank()
+                && !rangeHeader.regionMatches(
+                true,
+                0,
+                "bytes=",
+                0,
+                6
+        )) {
+            throw new BadRequestException("Invalid Range header");
+        }
+
+        HttpURLConnection connection = null;
+        try {
+            URI upstreamUri = resolveYoloMediaUri(
+                    attachment.getAnnotatedFileUrl()
+            );
+
+            connection = (HttpURLConnection)
+                    upstreamUri.toURL().openConnection();
+            connection.setRequestMethod("GET");
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(yoloConnectTimeout);
+            connection.setReadTimeout(yoloReadTimeout);
+            connection.setRequestProperty(
+                    HttpHeaders.ACCEPT,
+                    "*/*"
+            );
+            connection.setRequestProperty(
+                    HttpHeaders.ACCEPT_ENCODING,
+                    "identity"
+            );
+
+            if (rangeHeader != null && !rangeHeader.isBlank()) {
+                connection.setRequestProperty(
+                        HttpHeaders.RANGE,
+                        rangeHeader.trim()
+                );
+            }
+
+            int statusCode = connection.getResponseCode();
+            if (statusCode != HttpURLConnection.HTTP_OK
+                    && statusCode != HttpURLConnection.HTTP_PARTIAL
+                    && statusCode != 416) {
+                connection.disconnect();
+                throw new ExternalServiceException(
+                        "YOLO media service returned HTTP "
+                                + statusCode
+                );
+            }
+
+            String contentType = resolveMediaContentType(
+                    connection.getContentType(),
+                    attachment,
+                    upstreamUri
+            );
+            long contentLength = connection.getContentLengthLong();
+            String contentRange = connection.getHeaderField(
+                    HttpHeaders.CONTENT_RANGE
+            );
+            String acceptRanges = connection.getHeaderField(
+                    HttpHeaders.ACCEPT_RANGES
+            );
+            String etag = connection.getHeaderField(
+                    HttpHeaders.ETAG
+            );
+            long lastModified = connection.getLastModified();
+
+            HttpURLConnection activeConnection = connection;
+            StreamingResponseBody body = outputStream -> {
+                try (InputStream inputStream = statusCode >= 400
+                        ? activeConnection.getErrorStream()
+                        : activeConnection.getInputStream()) {
+                    if (inputStream != null) {
+                        inputStream.transferTo(outputStream);
+                    }
+                    outputStream.flush();
+                } finally {
+                    activeConnection.disconnect();
+                }
+            };
+
+            return new AiAttachmentMediaStream(
+                    statusCode,
+                    contentType,
+                    contentLength,
+                    contentRange,
+                    acceptRanges == null || acceptRanges.isBlank()
+                            ? "bytes"
+                            : acceptRanges,
+                    etag,
+                    lastModified,
+                    body
+            );
+        } catch (IOException | IllegalArgumentException ex) {
+            if (connection != null) {
+                connection.disconnect();
+            }
+            throw new ExternalServiceException(
+                    "Failed to read AI processed media: "
+                            + ex.getMessage(),
+                    ex
+            );
+        }
+    }
+
+    private URI resolveYoloMediaUri(
+            String storedUrl
+    ) {
+        URI configuredBase = URI.create(
+                yoloBaseUrl.endsWith("/")
+                        ? yoloBaseUrl
+                        : yoloBaseUrl + "/"
+        );
+        URI storedUri = URI.create(storedUrl.trim());
+
+        if (!storedUri.isAbsolute()) {
+            String relative = storedUrl.startsWith("/")
+                    ? storedUrl.substring(1)
+                    : storedUrl;
+            return configuredBase.resolve(relative);
+        }
+
+        String path = storedUri.getRawPath();
+        if (path == null || path.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Invalid AI processed media URL"
+            );
+        }
+
+        try {
+            return new URI(
+                    configuredBase.getScheme(),
+                    configuredBase.getUserInfo(),
+                    configuredBase.getHost(),
+                    configuredBase.getPort(),
+                    path,
+                    storedUri.getRawQuery(),
+                    null
+            );
+        } catch (Exception ex) {
+            throw new IllegalArgumentException(
+                    "Invalid AI processed media URL",
+                    ex
+            );
+        }
+    }
+
+    private String resolveMediaContentType(
+            String upstreamContentType,
+            IncidentAttachment attachment,
+            URI upstreamUri
+    ) {
+        if (upstreamContentType != null
+                && !upstreamContentType.isBlank()
+                && !"application/octet-stream".equalsIgnoreCase(
+                upstreamContentType
+        )) {
+            return upstreamContentType;
+        }
+
+        String path = upstreamUri.getPath() == null
+                ? ""
+                : upstreamUri.getPath().toLowerCase();
+        if (path.endsWith(".mp4")) {
+            return "video/mp4";
+        }
+        if (path.endsWith(".webm")) {
+            return "video/webm";
+        }
+        if (path.endsWith(".mov")) {
+            return "video/quicktime";
+        }
+        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (path.endsWith(".png")) {
+            return "image/png";
+        }
+
+        return attachment.getContentType() == null
+                || attachment.getContentType().isBlank()
+                ? "application/octet-stream"
+                : attachment.getContentType();
+    }
+
+    public record AiAttachmentMediaStream(
+            int statusCode,
+            String contentType,
+            long contentLength,
+            String contentRange,
+            String acceptRanges,
+            String etag,
+            long lastModified,
+            StreamingResponseBody body
+    ) {
+    }
+
 
     /**
      * 指挥中心标记附件为已查看。

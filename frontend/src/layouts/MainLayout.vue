@@ -19,7 +19,7 @@
           <el-menu
             :default-active="activeMenu"
             mode="horizontal"
-            :ellipsis="menuEllipsis"
+            :ellipsis="false"
             class="nav-menu"
             router
           >
@@ -67,7 +67,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { ROLES } from '@/utils/role'
@@ -112,14 +112,6 @@ const menuItems = computed(() => menuConfig[userStore.role] || [])
 const activeMenu = computed(() => route.path)
 const isImmersive = computed(() => Boolean(route.meta.immersive))
 
-const isNarrow = ref(false)
-const menuEllipsis = computed(() => isNarrow.value)
-
-function updateNarrow() {
-  isNarrow.value = window.matchMedia('(max-width: 768px)').matches
-}
-
-
 const showFloatingBall = computed(() => userStore.role === ROLES.POLICE.key)
 
 const tagType = computed(() => {
@@ -140,15 +132,8 @@ function onScroll() {
   }
 }
 
-onMounted(() => {
-  updateNarrow()
-  window.addEventListener('resize', updateNarrow)
-  window.addEventListener('scroll', onScroll, { passive: true })
-})
-onUnmounted(() => {
-  window.removeEventListener('resize', updateNarrow)
-  window.removeEventListener('scroll', onScroll)
-})
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+onUnmounted(() => window.removeEventListener('scroll', onScroll))
 
 function handleCommand(command) {
   if (command === 'profile') {
@@ -171,8 +156,6 @@ function handleCommand(command) {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  max-width: 100vw;
-  overflow-x: hidden;
   background: $bg;
 
   &.is-immersive {
@@ -185,7 +168,6 @@ function handleCommand(command) {
 }
 
 .top-header {
-  overflow: hidden;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -346,100 +328,4 @@ function handleCommand(command) {
     overflow: hidden;
   }
 }
-
-
-@media (max-width: 768px) {
-  .header-inner {
-    padding: 0 10px;
-    gap: 6px;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .header-left {
-    flex: 1 1 auto;
-    min-width: 0;
-    margin-right: 0;
-  }
-
-  .logo {
-    min-width: 0;
-  }
-
-  .logo .logo-text {
-    font-size: 12px;
-    max-width: 7.5em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .logo .logo-sub {
-    display: none;
-  }
-
-  .header-center {
-    flex: 0 1 auto;
-    min-width: 0;
-    justify-content: flex-start;
-    overflow: hidden;
-  }
-
-  .nav-menu {
-    max-width: 100%;
-
-    .el-menu-item {
-      padding: 0 8px !important;
-      margin: 0 !important;
-
-      span {
-        display: none;
-      }
-
-      .el-icon {
-        margin-right: 0;
-      }
-    }
-  }
-
-  .header-right {
-    flex: 0 0 auto;
-    margin-left: 0;
-  }
-
-  .user-info {
-    gap: 0;
-    padding: 2px;
-
-    .username,
-    .role-tag,
-    .dropdown-arrow {
-      display: none;
-    }
-
-    .user-avatar {
-      flex-shrink: 0;
-    }
-  }
-
-  .main-content {
-    padding: 12px;
-    max-width: 100%;
-    box-sizing: border-box;
-    overflow-x: hidden;
-  }
-
-  .system-status {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
-  .logo .logo-text {
-    display: none;
-  }
-}
-
 </style>

@@ -10,9 +10,20 @@ services:
       - --appendonly
       - "yes"
       - --requirepass
-      - "${REDIS_PASSWORD:-change-this-redis-password}"
+      - "change-this-redis-password"
     volumes:
       - transfer_redis_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - -a
+        - change-this-redis-password
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
 volumes:
   transfer_redis_data:
