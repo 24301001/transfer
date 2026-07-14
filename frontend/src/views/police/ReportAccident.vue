@@ -314,36 +314,35 @@
         </div>
       </div>
       <div class="submission-actions">
-        <el-button type="primary" icon="View" @click="openResultDialog" :disabled="!result">
-          查看系统识别结果
-        </el-button>
-        <el-button icon="ChatLineSquare" @click="openAdviceDialog" :disabled="!result">
-          查看初步处置建议
+        <el-button type="primary" icon="View" @click="openResultDialog">
+          查看提交结果
         </el-button>
         <el-button icon="Refresh" @click="handleReset">重新上报</el-button>
       </div>
     </div>
 
-    <!-- 提交结果弹窗 -->
+    <!-- 提交结果弹窗（两阶段：即时建议 → 轮询预测结果） -->
     <el-dialog
       v-model="resultVisible"
       title="事故提交结果"
-      width="780px"
+      width="660px"
       top="5vh"
       destroy-on-close
       class="public-report-dialog"
+      @closed="stopPredictionPolling"
     >
-      <div v-if="result" class="result-container">
-        <div v-if="submitSucceeded" class="result-success-banner">
+      <div class="result-container">
+        <!-- 成功横幅 -->
+        <div class="result-success-banner">
           <el-icon :size="20"><CircleCheckFilled /></el-icon>
-          事故已成功提交至指挥中心，系统正在进行智能分析
+          事故已成功提交至指挥中心，编号：{{ submissionIncidentNo }}
         </div>
 
-        <!-- ── 1. 市民即时安全提示 ── -->
+        <!-- ── 第一阶段：即时安全提示 ── -->
         <div v-if="publicReportMeta?.immediateAdvice" class="result-section advice-section">
           <h4>
             <el-icon style="vertical-align:-3px;"><WarningFilled /></el-icon>
-            市民即时安全提示
+            即时安全建议
           </h4>
           <div class="advice-card">
             <p class="calming-msg">{{ publicReportMeta.immediateAdvice.calmingMessage }}</p>
@@ -364,7 +363,7 @@
           </div>
         </div>
 
-        <!-- ── 2. 预计交警到达时间 ── -->
+        <!-- 预计交警到达 -->
         <div v-if="publicReportMeta?.estimatedPoliceArrivalText" class="result-section arrival-section">
           <h4>
             <el-icon style="vertical-align:-3px;"><Van /></el-icon>
@@ -378,126 +377,111 @@
           />
         </div>
 
-        <!-- 3. 预测模块提交状态 -->
-        <div v-if="publicReportMeta?.predictionSubmit" class="result-section prediction-section">
-          <h4>
-            <el-icon style="vertical-align:-3px;"><DataAnalysis /></el-icon>
-            智能预测状态
-          </h4>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="提交状态">
-              <el-tag :type="publicReportMeta.predictionSubmit.submitted ? 'success' : 'warning'" size="small">
-                {{ publicReportMeta.predictionSubmit.submitted ? '已提交' : '未提交' }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="状态描述">
-              {{ publicReportMeta.predictionSubmit.status || publicReportMeta.predictionSubmit.message || '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item
-              v-if="publicReportMeta.predictionSubmit.dataModuleTraceId"
-              label="追踪编号"
-            >
-              <code class="trace-id">{{ publicReportMeta.predictionSubmit.dataModuleTraceId }}</code>
-            </el-descriptions-item>
-          </el-descriptions>
-        </div>
-
         <el-divider />
 
-        <!-- ── 4. 事故识别结果 ── -->
-        <div class="result-section">
-          <h4>事故识别结果</h4>
-          <div v-if="recognizedSceneLabels.length" class="result-labels">
-            <span class="label-title">场景识别</span>
-            <el-checkbox-group :model-value="recognizedSceneLabels" disabled>
-              <el-checkbox
-                v-for="label in SCENE_LABEL_OPTIONS"
-                :key="label"
-                :label="label"
-                :value="label"
-              />
-            </el-checkbox-group>
+        <!-- ── 第二阶段：智能预测结果 ── -->
+        <div class="result-section prediction-section">
+          <h4>
+            <el-icon style="vertical-align:-3px;"><DataAnalysis /></el-icon>
+            智能预测结果
+            <el-tag
+              v-if="predictionStatus === 'PROCESSING'"
+              type="warning"
+              size="small"
+              style="margin-left:8px;"
+            >
+              分析中
+            </el-tag>
+            <el-tag
+              v-else-if="predictionStatus === 'COMPLETED'"
+              type="success"
+              size="small"
+              style="margin-left:8px;"
+            >
+              已完成
+            </el-tag>
+            <el-tag
+              v-else-if="predictionStatus === 'FAILED'"
+              type="danger"
+              size="small"
+              style="margin-left:8px;"
+            >
+              异常
+            </el-tag>
+          </h4>
+
+          <!-- 处理中 -->
+          <div v-if="predictionStatus === 'PROCESSING'" class="prediction-loading">
+            <el-icon class="is-loading" :size="20"><Loading /></el-icon>
+            <span>{{ predictionMessage }}</span>
+            <el-progress
+              :percentage="100"
+              :show-text="false"
+              :indeterminate="true"
+              :stroke-width="4"
+              style="margin-top:10px;"
+            />
           </div>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <div class="result-stat">
-                <span class="stat-label">事故类型</span>
-                <span class="stat-value highlight">{{ result.type }}</span>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="result-stat">
-                <span class="stat-label">风险等级</span>
-                <RiskBadge :level="result.riskLevel" size="large" />
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="result-stat">
-                <span class="stat-label">是否有人受伤</span>
-                <span class="stat-value">{{ result.injuryReported ? '是' : '否' }}</span>
-              </div>
-            </el-col>
-          </el-row>
 
-        </div>
-      </div>
-
-      <template #footer>
-        <el-button @click="resultVisible = false; adviceVisible = false">关闭</el-button>
-        <el-button type="primary" @click="resultVisible = false">我知道了</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 处置建议独立弹窗 -->
-    <el-dialog v-model="adviceVisible" title="初步处置建议" width="600px" top="20vh" destroy-on-close>
-      <div v-if="result" class="advice-container">
-        <div class="advice-section">
-          <h4>
-            <el-icon style="vertical-align:-2px;"><WarningFilled /></el-icon>
-            事故信息
-          </h4>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="事故编号">{{ result.caseNo }}</el-descriptions-item>
-            <el-descriptions-item label="事故类型">{{ result.type }}</el-descriptions-item>
-            <el-descriptions-item label="风险等级">
-              <RiskBadge :level="result.riskLevel" size="small" />
+          <!-- 已完成 -->
+          <el-descriptions
+            v-else-if="predictionStatus === 'COMPLETED' && predictionResult"
+            :column="2"
+            border
+            size="small"
+          >
+            <el-descriptions-item label="事故类型">
+              {{ predictionResult.accidentType || '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="影响车道">{{ result.affectedLanes }}</el-descriptions-item>
+            <el-descriptions-item label="风险等级">
+              <RiskBadge :level="predictionResult.riskLevel" size="small" />
+            </el-descriptions-item>
+            <el-descriptions-item label="风险评分">
+              {{ predictionResult.riskScore != null ? predictionResult.riskScore.toFixed(1) : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="置信度">
+              {{ predictionResult.confidence != null ? (predictionResult.confidence * 100).toFixed(1) + '%' : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="预计拥堵">
+              {{ predictionResult.congestionDurationMinutes != null ? predictionResult.congestionDurationMinutes + ' 分钟' : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="预计恢复">
+              {{ predictionResult.recoveryDurationMinutes != null ? predictionResult.recoveryDurationMinutes + ' 分钟' : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="处置建议" :span="2">
+              {{ predictionResult.suggestions || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="预测说明" :span="2">
+              {{ predictionResult.explanation || '-' }}
+            </el-descriptions-item>
           </el-descriptions>
-        </div>
 
-        <div class="advice-section">
-          <h4>
-            <el-icon style="vertical-align:-2px;"><Collection /></el-icon>
-            初步处置建议
-          </h4>
+          <!-- 异常 -->
           <el-alert
-            :title="result.disposalAdvice"
+            v-else-if="predictionStatus === 'FAILED'"
+            :title="predictionMessage"
             type="warning"
-            :closable="false"
             show-icon
-            class="advice-alert"
+            :closable="false"
           />
         </div>
 
-        <div class="advice-section">
-          <h4>
-            <el-icon style="vertical-align:-2px;"><ChatLineSquare /></el-icon>
-            预计影响
-          </h4>
-          <el-descriptions :column="2" border size="small">
-            <el-descriptions-item label="拥堵时长">{{ result.congestionDuration }}</el-descriptions-item>
-            <el-descriptions-item label="恢复时间">{{ result.recoveryTime }}</el-descriptions-item>
-          </el-descriptions>
-        </div>
-
-        <div class="advice-section" v-if="result.supportAdvice">
-          <h4>支援建议</h4>
-          <el-alert :title="result.supportAdvice" type="info" :closable="false" show-icon />
+        <!-- 场景识别标签 -->
+        <div v-if="recognizedSceneLabels.length" class="result-section">
+          <h4>场景识别</h4>
+          <el-checkbox-group :model-value="recognizedSceneLabels" disabled>
+            <el-checkbox
+              v-for="label in SCENE_LABEL_OPTIONS"
+              :key="label"
+              :label="label"
+              :value="label"
+            />
+          </el-checkbox-group>
         </div>
       </div>
+
       <template #footer>
-        <el-button type="primary" @click="adviceVisible = false">我知道了</el-button>
+        <el-button type="primary" @click="resultVisible = false">我知道了</el-button>
       </template>
     </el-dialog>
   </div>
@@ -508,13 +492,13 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
 import { useAiChatContext } from '@/composables/useAiChatContext'
-import { publicReport, publicReportWithAttachments } from '@/services/modules/accident'
+import { publicReport, publicReportWithAttachments, getPredictionStatus } from '@/services/modules/accident'
 import { reverseGeocode } from '@/services/modules/map'
 import { getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import {
-  Upload, Aim, LocationFilled, Loading, View, Collection,
-  WarningFilled, ChatLineSquare, VideoCamera, VideoPause, Delete, InfoFilled,
+  Upload, Aim, LocationFilled, Loading, View,
+  WarningFilled, VideoCamera, VideoPause, Delete, InfoFilled,
   CircleCheckFilled, Van, DataAnalysis,
 } from '@element-plus/icons-vue'
 import PhotoUploader from '@/components/PhotoUploader.vue'
@@ -528,15 +512,23 @@ const mapCardRef = ref(null)
 const submitting = ref(false)
 const locating = ref(false)
 const resultVisible = ref(false)
-const adviceVisible = ref(false)
 const result = ref(null)
 const lastSubmission = ref(null)
 const aiDetectedType = ref('') // AI 识别到的事故类型
+const submissionIncidentNo = ref('') // 提交后的事故编号
 
 /** 公共上报返回的元数据（即时提示、预计到达、预测提交状态） */
 const publicReportMeta = ref(null)
 /** 提交成功后显示绿色提示 */
 const submitSucceeded = ref(false)
+
+// ── 预测轮询状态 ──
+const predictionStatus = ref('') // 'PROCESSING' | 'COMPLETED' | 'FAILED'
+const predictionMessage = ref('')
+const predictionResult = ref(null)
+let predictionTimer = null
+let predictionAttempts = 0
+const predictionTrackingToken = ref('') // 匿名查询令牌
 
 // ====== 表单数据（必须在 AI 聊天上下文之前定义，避免 TDZ）======
 const form = reactive({
@@ -936,7 +928,7 @@ async function handleSubmit() {
         location: form.locationName,
       }
 
-      // 识别结果数据（与原有 result 结构一致）
+      submissionIncidentNo.value = detail?.caseNo || ''
       result.value = detail
       aiDetectedType.value = data.aiDetectedType || detail?.sceneLabels?.join(', ') || ''
       form.sceneLabels = Array.from(new Set([
@@ -944,7 +936,6 @@ async function handleSubmit() {
         ...(detail?.sceneLabels || []),
       ].filter(Boolean)))
 
-      // 公共上报附加元数据
       publicReportMeta.value = {
         immediateAdvice: data.immediateAdvice,
         estimatedPoliceArrivalMinutes: data.estimatedPoliceArrivalMinutes,
@@ -956,9 +947,17 @@ async function handleSubmit() {
         accidentStore.updateAccident(detail.id, detail)
       }
 
+      // 保存 trackingToken 用于后续匿名轮询
+      predictionTrackingToken.value = data.trackingToken || ''
+
       submitSucceeded.value = true
       resultVisible.value = true
       ElMessage.success('事故提交成功')
+
+      // 启动预测结果轮询
+      if (detail?.id && data.trackingToken) {
+        startPredictionPolling(detail.id, data.trackingToken)
+      }
     }
   } catch (err) {
     const message = err?.code === 'ECONNABORTED'
@@ -995,10 +994,11 @@ function handleReset() {
   mapCenter.value = null
   result.value = null
   resultVisible.value = false
-  adviceVisible.value = false
   lastSubmission.value = null
   publicReportMeta.value = null
   submitSucceeded.value = false
+  submissionIncidentNo.value = ''
+  stopPredictionPolling()
   formRef.value?.resetFields()
 }
 
@@ -1006,8 +1006,51 @@ function openResultDialog() {
   resultVisible.value = true
 }
 
-function openAdviceDialog() {
-  adviceVisible.value = true
+// ── 预测结果轮询 ──
+
+function startPredictionPolling(incidentId, trackingToken) {
+  stopPredictionPolling()
+
+  predictionStatus.value = 'PROCESSING'
+  predictionMessage.value = 'AI 正在分析事故视频，预计约 1 分钟'
+  predictionResult.value = null
+  predictionAttempts = 0
+
+  predictionTimer = window.setInterval(async () => {
+    predictionAttempts += 1
+
+    try {
+      const res = await getPredictionStatus(incidentId, trackingToken)
+
+      if (res.code === 200 && res.data.completed) {
+        predictionResult.value = res.data.result
+        predictionStatus.value = 'COMPLETED'
+        predictionMessage.value = '事故预测已完成'
+        stopPredictionPolling()
+        return
+      }
+
+      if (predictionAttempts >= 36) {
+        predictionStatus.value = 'FAILED'
+        predictionMessage.value = '预测仍在处理中，可稍后在事故记录中查看'
+        stopPredictionPolling()
+      }
+    } catch {
+      // 404 表示尚无结果，继续等待
+      if (predictionAttempts >= 36) {
+        predictionStatus.value = 'FAILED'
+        predictionMessage.value = '预测结果获取失败，请稍后查看'
+        stopPredictionPolling()
+      }
+    }
+  }, 5000)
+}
+
+function stopPredictionPolling() {
+  if (predictionTimer) {
+    window.clearInterval(predictionTimer)
+    predictionTimer = null
+  }
 }
 </script>
 
@@ -1421,26 +1464,32 @@ function openAdviceDialog() {
       border-radius: 4px;
       color: $text-secondary;
     }
-  }
-}
 
-.advice-container {
-  .advice-section {
-    margin-bottom: 20px;
-
-    h4 {
-      font-family: $font-sans;
+    .prediction-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 0;
+      gap: 8px;
+      color: $text-secondary;
       font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 10px;
-      color: $text-primary;
+
+      .is-loading {
+        font-size: 24px;
+        color: $accent;
+        animation: rotating 2s linear infinite;
+      }
     }
   }
-
-  .advice-alert {
-    white-space: pre-line;
-  }
 }
+
+@keyframes rotating {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+
+
 </style>
 
 
