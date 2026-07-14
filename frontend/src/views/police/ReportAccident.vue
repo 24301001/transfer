@@ -6,7 +6,7 @@
     </div>
 
     <div class="page-card">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" size="large">
+      <el-form ref="formRef" :model="form" :rules="rules" :label-position="labelPosition" :label-width="labelWidth" size="large" class="report-form">
         <!-- 事故照片 -->
         <el-form-item label="事故照片" prop="images">
           <PhotoUploader v-model="form.images" />
@@ -585,7 +585,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
 import { useAiChatContext } from '@/composables/useAiChatContext'
@@ -670,7 +670,18 @@ function syncChatContext() {
   })
 }
 
+
+const isNarrow = ref(false)
+const labelPosition = computed(() => (isNarrow.value ? 'top' : 'right'))
+const labelWidth = computed(() => (isNarrow.value ? 'auto' : '100px'))
+
+function updateFormLayout() {
+  isNarrow.value = window.matchMedia('(max-width: 768px)').matches
+}
+
 onMounted(() => {
+  updateFormLayout()
+  window.addEventListener('resize', updateFormLayout)
   syncChatContext()
 })
 
@@ -1493,6 +1504,10 @@ function stopPredictionPolling() {
     predictionTimer = null
   }
 }
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateFormLayout)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -1857,6 +1872,118 @@ function stopPredictionPolling() {
   }
 }
 
+}
+
+/* ====== 移动端适配 (≤768px) ====== */
+@media (max-width: 768px) {
+  .report-page {
+    max-width: 100%;
+    padding: 0 6px;
+  }
+
+  .page-header {
+    h2 { font-size: 18px; }
+    p { font-size: 12px; }
+  }
+
+  .page-card {
+    padding: 12px 8px;
+    border-radius: 8px;
+  }
+
+    :deep(.report-form) {
+    .el-form-item {
+      display: block;
+      margin-bottom: 18px;
+    }
+
+    .el-form-item__label {
+      display: block !important;
+      float: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      text-align: left !important;
+      justify-content: flex-start !important;
+      line-height: 1.4;
+      padding: 0 0 8px !important;
+      margin: 0 !important;
+      font-size: 13px;
+      font-weight: 600;
+      height: auto !important;
+    }
+
+    .el-form-item__content {
+      display: block;
+      margin-left: 0 !important;
+      width: 100% !important;
+    }
+  }
+
+  :deep(.el-form-item__label-wrap) {
+    margin-left: 0 !important;
+  }
+
+  /* 地点选择器 */
+  .location-picker {
+    flex-direction: column;
+
+    .location-input {
+      min-width: 100%;
+    }
+  }
+
+  /* 场景标签 checkbox 组 */
+  .scene-labels {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* 视频录制区 */
+  .video-recorder {
+    .video-placeholder {
+      .video-choice {
+        grid-template-columns: 1fr;
+      }
+
+      .video-choice-divider {
+        width: 100%;
+        height: 1px;
+      }
+    }
+  }
+
+  /* 提交前摘要 */
+  .submission-summary {
+    .summary-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* 结果弹窗 */
+  :deep(.public-report-dialog) {
+    width: 94% !important;
+    max-width: 420px;
+
+    .result-section {
+      h4 { font-size: 14px; }
+    }
+  }
+
+  :deep(.el-descriptions) {
+    .el-descriptions__label {
+      width: 70px;
+      font-size: 11px;
+    }
+    .el-descriptions__content {
+      font-size: 12px;
+    }
+  }
+
+  /* 按钮全宽 */
+  .submission-actions .el-button {
+    width: 100%;
+    height: 44px;
+    font-size: 15px;
+  }
 }
 
 @media (max-width: 640px) {

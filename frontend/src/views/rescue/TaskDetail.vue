@@ -22,7 +22,7 @@
     >
       <el-row :gutter="16">
         <!-- 基本信息 -->
-        <el-col :span="16" class="left-col">
+        <el-col :xs="24" :sm="24" :md="24" :lg="16" class="left-col">
           <div class="page-card left-card">
             <div class="detail-header">
               <div>
@@ -60,7 +60,7 @@
             <el-divider />
 
             <el-descriptions
-              :column="2"
+              :column="descColumns"
               border
             >
               <el-descriptions-item
@@ -142,7 +142,7 @@
               </h3>
 
               <el-descriptions
-                :column="2"
+                :column="descColumns"
                 border
                 size="small"
               >
@@ -174,7 +174,7 @@
         </el-col>
 
         <!-- 右侧：现场风险、处置建议、状态更新 -->
-        <el-col :span="8">
+        <el-col :xs="24" :sm="24" :md="24" :lg="8" class="right-col">
           <!-- 现场风险 -->
           <div
             class="page-card"
@@ -409,6 +409,7 @@
 import {
   computed,
   onMounted,
+  onUnmounted,
   ref,
 } from 'vue'
 
@@ -480,6 +481,13 @@ const stepIndex = computed(() => {
 
   return map[task.value?.status] ?? 0
 })
+
+const isMobile = ref(false)
+const descColumns = computed(() => (isMobile.value ? 1 : 2))
+
+function updateMobileFlag() {
+  isMobile.value = window.matchMedia('(max-width: 768px)').matches
+}
 
 /**
  * 事故地点标记。
@@ -743,7 +751,15 @@ async function confirmComplete() {
   feedbackForm.value.feedback = ''
 }
 
-onMounted(fetchDetail)
+onMounted(() => {
+  updateMobileFlag()
+  window.addEventListener('resize', updateMobileFlag)
+  fetchDetail()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMobileFlag)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -888,6 +904,63 @@ onMounted(fetchDetail)
     color: $text-primary;
     font-size: 13px;
     line-height: 1.6;
+  }
+}
+
+/* ====== 移动端适配 (≤768px) ====== */
+/* ====== mobile <=768px ====== */
+@media (max-width: 768px) {
+  .task-detail-page {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .left-col,
+  .right-col {
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+    margin-bottom: 12px;
+  }
+
+  .page-card {
+    padding: 16px;
+  }
+
+  .detail-header {
+    flex-direction: column;
+    gap: 10px;
+
+    h2 { font-size: 17px; }
+    .header-meta { flex-wrap: wrap; gap: 8px; font-size: 12px; }
+    .header-tags { align-self: flex-start; }
+  }
+
+  .map-wrapper {
+    min-height: 220px;
+  }
+
+  .el-descriptions {
+    :deep(.el-descriptions__label) {
+      width: 72px;
+      font-size: 11px;
+    }
+    :deep(.el-descriptions__content) {
+      font-size: 12px;
+    }
+  }
+
+  .status-actions .el-button--large {
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .section-title {
+    font-size: 14px;
+  }
+
+  :deep(.el-dialog) {
+    width: 92% !important;
+    max-width: 450px;
   }
 }
 </style>
