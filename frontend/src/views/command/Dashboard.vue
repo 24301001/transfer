@@ -782,6 +782,7 @@
       append-to-body
       destroy-on-close
       :close-on-click-modal="false"
+      @closed="clearMediaObjectUrls"
     >
       <div v-loading="mediaLoading" class="media-dialog-body">
         <template v-if="!mediaLoading && mediaItems.length">
@@ -794,8 +795,8 @@
               <!-- YOLO 标注照片 -->
               <template v-if="item.attachmentType === 'PHOTO'">
                 <el-image
-                  :src="item.annotatedFileUrl || item.fileUrl"
-                  :preview-src-list="mediaItems.filter(i => i.attachmentType === 'PHOTO').map(i => i.annotatedFileUrl || i.fileUrl)"
+                  :src="item.displayUrl"
+                  :preview-src-list="mediaItems.filter(i => i.attachmentType === 'PHOTO' && i.displayUrl).map(i => i.displayUrl)"
                   :initial-index="index"
                   fit="cover"
                   class="media-thumb"
@@ -811,22 +812,25 @@
                   </template>
                 </el-image>
                 <div class="media-label">
-                  <el-tag size="small" type="success" effect="plain">📷 YOLO 标注照片</el-tag>
+                  <el-tag size="small" type="success" effect="plain">{{ item.hasAnnotatedMedia ? '📷 YOLO 标注照片' : '📷 原始照片' }}</el-tag>
                 </div>
               </template>
 
               <!-- YOLO 标注视频 -->
               <template v-else-if="item.attachmentType === 'VIDEO'">
                 <video
+                  :key="`${item.id}-${item.displayUrl}`"
+                  :src="item.displayUrl"
                   controls
                   preload="metadata"
+                  playsinline
                   class="media-video"
                   @error="(e) => e.target.classList.add('is-error')"
                 >
-                  <source :src="item.annotatedFileUrl || item.fileUrl" :type="item.contentType || 'video/mp4'" />
+                  当前浏览器不支持该视频格式
                 </video>
                 <div class="media-label">
-                  <el-tag size="small" type="warning" effect="plain">🎬 YOLO 标注视频</el-tag>
+                  <el-tag size="small" :type="item.hasAnnotatedMedia ? 'warning' : 'info'" effect="plain">{{ item.hasAnnotatedMedia ? '🎬 YOLO 标注视频' : '🎬 原始视频（未返回标注结果）' }}</el-tag>
                 </div>
               </template>
 
@@ -840,14 +844,18 @@
                   round
                 >{{ type }}</el-tag>
               </div>
+
+              <div v-if="!item.hasAnnotatedMedia" class="media-warning">
+                未拿到 YOLO 标注文件路径，请检查接口是否返回 annotatedFileUrl / output_video_url
+              </div>
             </div>
           </div>
         </template>
 
         <div v-else-if="!mediaLoading" class="media-empty">
           <el-icon :size="48"><PictureFilled /></el-icon>
-          <p>暂无已完成 AI 分析的媒体文件</p>
-          <span>YOLO 检测完成后的标注图片 / 视频会出现在这里</span>
+          <p>暂无可展示的 AI 分析媒体文件</p>
+          <span>请确认后端返回 annotatedFileUrl，或在 aiDetectionJson 中返回 output_image_url / output_video_url</span>
         </div>
       </div>
 
@@ -868,6 +876,7 @@ import { getAccidentList, getAccidentDetail } from '@/services/modules/accident'
 import {
   dispatchSelectedVehicle,
   getDispatchList,
+  getIncidentAttachmentBlobUrl,
   getIncidentAttachments,
   getResponders,
   getVehicleEtas,
@@ -913,20 +922,67 @@ const mediaDialogVisible = ref(false)
 const mediaLoading = ref(false)
 const mediaItems = ref([])
 const mediaTitle = ref('')
+const mediaObjectUrls = ref([])
+
+function clearMediaObjectUrls() {
+  mediaObjectUrls.value.forEach((url) => URL.revokeObjectURL(url))
+  mediaObjectUrls.value = []
+}
+
+async function hydrateMediaDisplayUrls(incidentId, items) {
+  return Promise.all(items.map(async (item) => {
+    // 有 YOLO 标注文件时，直接展示 /runs/api/... 静态资源
+    if (item.annotatedFileUrl) {
+      return {
+        ...item,
+        displayUrl: item.annotatedFileUrl,
+        hasAnnotatedMedia: true,
+      }
+    }
+
+    // 没有标注文件时，只能兜底展示原始附件。
+    // 这里不能直接把 /api/v1/.../file 放进 <video>/<img>，因为媒体标签不会带 JWT。
+    try {
+      const blobUrl = await getIncidentAttachmentBlobUrl(incidentId, item.id)
+      mediaObjectUrls.value.push(blobUrl)
+      return {
+        ...item,
+        displayUrl: blobUrl,
+        hasAnnotatedMedia: false,
+      }
+    } catch (error) {
+      console.warn('[command] 原始媒体兜底加载失败:', error)
+      return {
+        ...item,
+        displayUrl: item.fileUrl,
+        hasAnnotatedMedia: false,
+      }
+    }
+  }))
+}
 
 async function openMediaDialog(incident) {
   if (!incident?.id) return
+  clearMediaObjectUrls()
   mediaTitle.value = `${incident.caseNo || '#' + incident.id} YOLO 分析现场媒体`
   mediaItems.value = []
   mediaLoading.value = true
   mediaDialogVisible.value = true
   try {
     const res = await getIncidentAttachments(incident.id)
-    mediaItems.value = (res.data || []).filter(
+    const visibleItems = (res.data || []).filter(
       (item) => item.attachmentType === 'PHOTO' || item.attachmentType === 'VIDEO'
     )
+    mediaItems.value = await hydrateMediaDisplayUrls(incident.id, visibleItems)
+
     if (!mediaItems.value.length) {
-      ElMessage.info('该事故暂无已完成 AI 分析的媒体文件')
+      ElMessage.info('该事故暂无可展示的 AI 分析媒体文件')
+      return
+    }
+
+    const missingAnnotatedCount = mediaItems.value.filter((item) => !item.hasAnnotatedMedia).length
+    if (missingAnnotatedCount) {
+      ElMessage.warning('部分媒体未返回 YOLO 标注文件路径，已临时展示原始媒体')
     }
   } catch (error) {
     ElMessage.error('加载分析媒体失败：' + (error.message || '未知错误'))
@@ -1549,6 +1605,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   if (pollTimer) clearInterval(pollTimer)
+  clearMediaObjectUrls()
 })
 </script>
 

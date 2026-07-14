@@ -675,36 +675,153 @@ export async function getIncidentDispatchTasks(
  * 获取事故的 AI 分析后附件（YOLO 标注图片/视频），供指挥中心查看。
  * GET /api/v1/command-center/incidents/{incidentId}/ai-attachments
  */
+function parseJson(value) {
+  if (!value) return null
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return null
+  }
+}
+
+function firstNonEmpty(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
+}
+
+function findNestedValue(source, keys) {
+  if (!source || typeof source !== 'object') return ''
+
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  for (const value of Object.values(source)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nested = findNestedValue(item, keys)
+        if (nested) return nested
+      }
+      continue
+    }
+
+    if (value && typeof value === 'object') {
+      const nested = findNestedValue(value, keys)
+      if (nested) return nested
+    }
+  }
+
+  return ''
+}
+
 /**
  * 将 YOLO 输出的绝对 URL（如 http://localhost:8000/runs/api/videos/x.mp4）
  * 转换为相对路径（/runs/api/videos/x.mp4），统一走 Vite 代理 / Spring Boot 静态资源。
  */
 function normalizeAnnotatedUrl(url) {
   if (!url) return ''
-  // 去掉协议 + 主机 + 端口，只保留 /runs/api/... 路径
-  return url.replace(/^https?:\/\/[^/]+/, '')
+  return String(url).trim().replace(/^https?:\/\/[^/]+/i, '')
+}
+
+function resolveAnnotatedUrl(att = {}) {
+  const detection = parseJson(att.aiDetectionJson)
+
+  return normalizeAnnotatedUrl(firstNonEmpty(
+    att.annotatedFileUrl,
+    att.annotatedUrl,
+    att.resultFileUrl,
+    att.processedFileUrl,
+    att.yoloOutputUrl,
+    att.outputVideoUrl,
+    att.outputImageUrl,
+    att.output_video_url,
+    att.output_image_url,
+    findNestedValue(detection, [
+      'annotatedFileUrl',
+      'annotatedUrl',
+      'resultFileUrl',
+      'processedFileUrl',
+      'yoloOutputUrl',
+      'output_video_url',
+      'outputVideoUrl',
+      'output_image_url',
+      'outputImageUrl',
+    ])
+  ))
+}
+
+function inferAttachmentType(att = {}) {
+  if (att.attachmentType) return att.attachmentType
+
+  const contentType = String(att.contentType || '').toLowerCase()
+  const fileName = String(att.originalFilename || att.fileName || '').toLowerCase()
+
+  if (contentType.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName)) {
+    return 'PHOTO'
+  }
+
+  if (contentType.startsWith('video/') || /\.(mp4|webm|mov|m4v|avi)$/i.test(fileName)) {
+    return 'VIDEO'
+  }
+
+  return att.attachmentType || 'OTHER'
+}
+
+function normalizeAiDetectedTypes(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(',')
+  return value || ''
+}
+
+/**
+ * 受保护的原始附件接口不能直接放到 <video>/<img> 中：浏览器不会给媒体标签自动带 Authorization。
+ * Dashboard 会用这个 API 路径通过 axios 取 Blob，再转成 objectURL 作为兜底。
+ */
+function attachmentFileApiPath(incidentId, attachmentId) {
+  return `/v1/incidents/${incidentId}/attachments/${attachmentId}/file`
+}
+
+export async function getIncidentAttachmentBlobUrl(incidentId, attachmentId) {
+  const res = await request.get(
+    attachmentFileApiPath(incidentId, attachmentId),
+    { responseType: 'blob' }
+  )
+
+  return URL.createObjectURL(res.data)
 }
 
 export async function getIncidentAttachments(incidentId) {
   const res = await request.get(
     `/v1/command-center/incidents/${incidentId}/ai-attachments`
   )
+
   return {
     code: 200,
-    data: (res.data || []).map((att) => ({
-      id: att.id,
-      incidentId: att.incidentId,
-      fileName: att.fileName,
-      originalFilename: att.originalFilename,
-      contentType: att.contentType,
-      attachmentType: att.attachmentType,
-      recognitionStatus: att.recognitionStatus,
-      aiDetectedTypes: att.aiDetectedTypes,
-      /** YOLO 输出标注文件，已转为相对路径走后端代理 */
-      annotatedFileUrl: normalizeAnnotatedUrl(att.annotatedFileUrl),
-      reviewed: att.reviewed,
-      /** 原始文件（通过后端接口加载，作为兜底） */
-      fileUrl: `/api/v1/incidents/${incidentId}/attachments/${att.id}/file`,
-    })),
+    data: (res.data || []).map((att) => {
+      const annotatedFileUrl = resolveAnnotatedUrl(att)
+      const attachmentType = inferAttachmentType(att)
+      const fileApiPath = attachmentFileApiPath(incidentId, att.id)
+
+      return {
+        id: att.id,
+        incidentId: att.incidentId || incidentId,
+        fileName: att.fileName,
+        originalFilename: att.originalFilename,
+        contentType: att.contentType,
+        attachmentType,
+        recognitionStatus: att.recognitionStatus,
+        aiDetectedTypes: normalizeAiDetectedTypes(att.aiDetectedTypes),
+        aiDetectionJson: att.aiDetectionJson || '',
+        /** YOLO 输出标注文件，已转为相对路径走后端代理 */
+        annotatedFileUrl,
+        hasAnnotatedMedia: Boolean(annotatedFileUrl),
+        reviewed: att.reviewed,
+        /** 原始文件接口信息（兜底用 Blob 加载，避免媒体标签丢 Authorization） */
+        fileApiPath,
+        fileUrl: `/api${fileApiPath}`,
+        displayUrl: annotatedFileUrl || '',
+      }
+    }),
   }
 }
