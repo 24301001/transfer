@@ -200,20 +200,47 @@
 
         <el-form-item label="现场流量">
           <div class="structured-grid">
-            <el-input-number
+            <!--
+              车流量：
+              拥堵存储数字 1
+              畅通存储数字 0
+            -->
+            <el-select
               v-model="form.trafficFlow"
-              :min="0"
-              :max="100"
-              controls-position="right"
-              placeholder="车流强度"
-            />
-            <el-input-number
+              clearable
+              placeholder="请选择车流量"
+            >
+              <el-option
+                label="拥堵（1）"
+                :value="1"
+              />
+
+              <el-option
+                label="畅通（0）"
+                :value="0"
+              />
+            </el-select>
+
+            <!--
+              人流量：
+              拥挤存储数字 1
+              不拥挤存储数字 0
+            -->
+            <el-select
               v-model="form.peopleFlow"
-              :min="0"
-              :max="100"
-              controls-position="right"
-              placeholder="人流强度"
-            />
+              clearable
+              placeholder="请选择人流量"
+            >
+              <el-option
+                label="拥挤（1）"
+                :value="1"
+              />
+
+              <el-option
+                label="不拥挤（0）"
+                :value="0"
+              />
+            </el-select>
             <div class="weather-field">
               <el-select
                 v-model="form.weather"
