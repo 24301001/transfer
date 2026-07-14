@@ -47,8 +47,8 @@
 
         <!-- 标题 -->
         <h1 class="brand-title" ref="titleRef">
-          道路交通事故风险预估<br />
-          <span class="title-thin">与后果预测平台</span>
+          交通事故智能识别与调度系统<br />
+         
         </h1>
         <p class="brand-sub" ref="subRef">Traffic Accident Risk Assessment & Prediction Platform</p>
 
