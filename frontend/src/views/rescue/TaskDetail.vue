@@ -22,8 +22,8 @@
     >
       <el-row :gutter="16">
         <!-- 基本信息 -->
-        <el-col :span="16">
-          <div class="page-card">
+        <el-col :span="16" class="left-col">
+          <div class="page-card left-card">
             <div class="detail-header">
               <div>
                 <h2>
@@ -106,20 +106,21 @@
               查询数据库中的车辆经纬度作为导航起点，
               再生成“救援车辆位置 → 事故地点”的导航路线。
             -->
-            <MapCard
-              :height="'200px'"
-              :title="task.location?.name"
-              :hint="
-                navigationLoading
-                  ? '正在读取调度车辆位置…'
-                  : '点击从调度车辆位置开始导航'
-              "
-              :markers="mapMarkers"
-              :center="mapCenter"
-              :zoom="15"
-              style="margin-top: 12px"
-              @click="handleNavigate"
-            />
+            <div class="map-wrapper">
+              <MapCard
+                height="100%"
+                :title="task.location?.name"
+                :hint="
+                  navigationLoading
+                    ? '正在读取调度车辆位置…'
+                    : '点击从调度车辆位置开始导航'
+                "
+                :markers="mapMarkers"
+                :center="mapCenter"
+                :zoom="15"
+                @click="handleNavigate"
+              />
+            </div>
 
             <div class="navigation-tip">
               <el-icon>
@@ -751,6 +752,30 @@ onMounted(fetchDetail)
 .task-detail-page {
   max-width: 1100px;
   margin: 0 auto;
+}
+
+.detail-row {
+  align-items: stretch;
+}
+
+.left-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.left-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.map-wrapper {
+  flex: 1;
+  min-height: 350px;
+  margin-top: 12px;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 .back-bar {
