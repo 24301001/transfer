@@ -6,7 +6,7 @@
     </div>
 
     <div class="page-card">
-      <el-form ref="formRef" :model="form" :rules="rules" :label-position="labelPosition" :label-width="labelWidth" size="large" class="report-form">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" size="large">
         <!-- 事故照片 -->
         <el-form-item label="事故照片" prop="images">
           <PhotoUploader v-model="form.images" />
@@ -200,137 +200,28 @@
 
         <el-form-item label="现场流量">
           <div class="structured-grid">
-            <!--
-              车流量：
-              拥堵存储数字 1
-              畅通存储数字 0
-            -->
-            <el-select
+            <el-input-number
               v-model="form.trafficFlow"
-              clearable
-              placeholder="请选择车流量"
-            >
-              <el-option
-                label="拥堵（1）"
-                :value="1"
-              />
-
-              <el-option
-                label="畅通（0）"
-                :value="0"
-              />
-            </el-select>
-
-            <!--
-              人流量：
-              拥挤存储数字 1
-              不拥挤存储数字 0
-            -->
-            <el-select
+              :min="0"
+              :max="100"
+              controls-position="right"
+              placeholder="车流强度"
+            />
+            <el-input-number
               v-model="form.peopleFlow"
-              clearable
-              placeholder="请选择人流量"
-            >
-              <el-option
-                label="拥挤（1）"
-                :value="1"
-              />
-
-              <el-option
-                label="不拥挤（0）"
-                :value="0"
-              />
+              :min="0"
+              :max="100"
+              controls-position="right"
+              placeholder="人流强度"
+            />
+            <el-select v-model="form.weather" clearable placeholder="现场天气">
+              <el-option label="晴" value="晴" />
+              <el-option label="多云" value="多云" />
+              <el-option label="阴" value="阴" />
+              <el-option label="雨" value="雨" />
+              <el-option label="雪" value="雪" />
+              <el-option label="雾" value="雾" />
             </el-select>
-            <div class="weather-field">
-              <el-select
-                v-model="form.weather"
-                clearable
-                filterable
-                allow-create
-                default-first-option
-                placeholder="定位后自动获取天气"
-                :loading="weatherLoading"
-              >
-                <!--
-                  百度可能返回“小雨、阵雨、雷阵雨”等动态值。
-                  当返回值不在预设列表中时，保证下拉框仍能正常显示。
-                -->
-                <el-option
-                  v-if="
-                    form.weather &&
-                    !WEATHER_OPTIONS.includes(form.weather)
-                  "
-                  :label="form.weather"
-                  :value="form.weather"
-                />
-
-                <el-option
-                  v-for="item in WEATHER_OPTIONS"
-                  :key="item"
-                  :label="item"
-                  :value="item"
-                />
-              </el-select>
-
-              <div
-                v-if="weatherLoading"
-                class="weather-status is-loading"
-              >
-                <el-icon class="is-loading">
-                  <Loading />
-                </el-icon>
-
-                正在获取事故地点实时天气…
-              </div>
-
-              <div
-                v-else-if="weatherDetail"
-                class="weather-status"
-              >
-                <span class="weather-main">
-                  {{ weatherDetail.text || form.weather }}
-                  <template
-                    v-if="
-                      weatherDetail.temperatureC !== null &&
-                      weatherDetail.temperatureC !== undefined
-                    "
-                  >
-                    · {{ weatherDetail.temperatureC }}℃
-                  </template>
-                </span>
-
-                <span
-                  v-if="weatherDetail.humidityPercent !== null &&
-                    weatherDetail.humidityPercent !== undefined"
-                >
-                  湿度 {{ weatherDetail.humidityPercent }}%
-                </span>
-
-                <span
-                  v-if="
-                    weatherDetail.windDirection ||
-                    weatherDetail.windClass
-                  "
-                >
-                  {{ weatherDetail.windDirection || '' }}
-                  {{ weatherDetail.windClass || '' }}
-                </span>
-
-                <span
-                  v-if="weatherDetail.city || weatherDetail.district"
-                >
-                  {{ weatherDetail.city || '' }}
-                  {{ weatherDetail.district || '' }}
-                </span>
-              </div>
-
-              <div
-                v-else-if="weatherError"
-                class="weather-status is-error"
-              >
-                {{ weatherError }}，可手动选择天气
-              </div>
-            </div>
           </div>
         </el-form-item>
 
@@ -539,20 +430,20 @@
             border
             size="small"
           >
-            <el-descriptions-item label="场景类别">
-              <template v-if="recognizedSceneLabels.length">
-                <el-tag
-                  v-for="label in recognizedSceneLabels"
-                  :key="label"
-                  size="small"
-                  effect="plain"
-                  style="margin-right:4px;"
-                >{{ label }}</el-tag>
-              </template>
-              <span v-else>-</span>
+            <el-descriptions-item label="事故类型">
+              {{ predictionResult.accidentType || '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="风险等级">
               <RiskBadge :level="predictionResult.riskLevel" size="small" />
+            </el-descriptions-item>
+            <el-descriptions-item label="风险评分">
+              {{ predictionResult.riskScore != null ? predictionResult.riskScore.toFixed(1) : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="置信度">
+              {{ predictionResult.confidence != null ? (predictionResult.confidence * 100).toFixed(1) + '%' : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="预计拥堵">
+              {{ predictionResult.congestionDurationMinutes != null ? predictionResult.congestionDurationMinutes + ' 分钟' : '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="预计恢复">
               {{ predictionResult.recoveryDurationMinutes != null ? predictionResult.recoveryDurationMinutes + ' 分钟' : '-' }}
@@ -575,6 +466,18 @@
           />
         </div>
 
+        <!-- 场景识别标签 -->
+        <div v-if="recognizedSceneLabels.length" class="result-section">
+          <h4>场景识别</h4>
+          <el-checkbox-group :model-value="recognizedSceneLabels" disabled>
+            <el-checkbox
+              v-for="label in SCENE_LABEL_OPTIONS"
+              :key="label"
+              :label="label"
+              :value="label"
+            />
+          </el-checkbox-group>
+        </div>
       </div>
 
       <template #footer>
@@ -585,13 +488,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useAccidentStore } from '@/stores/accident'
 import { useAiChatContext } from '@/composables/useAiChatContext'
 import { publicReport, publicReportWithAttachments, getPredictionStatus } from '@/services/modules/accident'
 import { reverseGeocode } from '@/services/modules/map'
-import { getCurrentWeather } from '@/services/modules/weather'
 import { getRealCurrentPosition, getBaiduIPLocation, bd09ToWgs84, wgs84ToBd09 } from '@/utils/location'
 import { ElMessage } from 'element-plus'
 import {
@@ -670,18 +572,7 @@ function syncChatContext() {
   })
 }
 
-
-const isNarrow = ref(false)
-const labelPosition = computed(() => (isNarrow.value ? 'top' : 'right'))
-const labelWidth = computed(() => (isNarrow.value ? 'auto' : '100px'))
-
-function updateFormLayout() {
-  isNarrow.value = window.matchMedia('(max-width: 768px)').matches
-}
-
 onMounted(() => {
-  updateFormLayout()
-  window.addEventListener('resize', updateFormLayout)
   syncChatContext()
 })
 
@@ -693,71 +584,6 @@ watch(
 
 // 地图中心（BD09 坐标系，用于传给 MapCard）
 const mapCenter = ref(null)
-
-// ====== 实时天气 ======
-
-/**
- * 天气接口加载状态。
- */
-const weatherLoading = ref(false)
-
-/**
- * 后端返回的完整天气信息。
- */
-const weatherDetail = ref(null)
-
-/**
- * 天气接口错误信息。
- */
-const weatherError = ref('')
-
-/**
- * 天气下拉框预设选项。
- *
- * 接口返回其他天气名称时，
- * el-select 的 allow-create 仍然可以正常显示。
- */
-const WEATHER_OPTIONS = [
-  '晴',
-  '多云',
-  '阴',
-  '阵雨',
-  '雷阵雨',
-  '雷阵雨伴有冰雹',
-  '小雨',
-  '中雨',
-  '大雨',
-  '暴雨',
-  '大暴雨',
-  '特大暴雨',
-  '雨夹雪',
-  '阵雪',
-  '小雪',
-  '中雪',
-  '大雪',
-  '暴雪',
-  '雾',
-  '浓雾',
-  '强浓雾',
-  '霾',
-  '浮尘',
-  '扬沙',
-  '沙尘暴',
-  '强沙尘暴',
-]
-
-/**
- * 天气请求序号。
- *
- * 防止连续点击不同位置时，
- * 较早请求返回的数据覆盖最后选择地点的数据。
- */
-let weatherRequestSequence = 0
-
-/**
- * 地图点击后查询天气的防抖定时器。
- */
-let weatherQueryTimer = null
 
 const SCENE_LABEL_OPTIONS = ['car flip', 'car crash', 'car damage', 'fire/smoke']
 
@@ -947,280 +773,32 @@ function onCustomLocationInput(val) {
   }
 }
 
-/**
- * 根据事故地点经纬度获取实时天气，
- * 并自动填写 form.weather。
- *
- * @param {number} longitude WGS84 经度
- * @param {number} latitude WGS84 纬度
- * @param {{ silent?: boolean }} options 查询配置
- */
-async function fillWeatherByLocation(
-  longitude,
-  latitude,
-  options = {}
-) {
-  const lng = Number(longitude)
-  const lat = Number(latitude)
-
-  if (
-    !Number.isFinite(lng) ||
-    !Number.isFinite(lat)
-  ) {
-    return
-  }
-
-  const currentSequence =
-    ++weatherRequestSequence
-
-  weatherLoading.value = true
-  weatherError.value = ''
-
-  try {
-    /*
-     * ReportAccident 表单中的 locationLng/locationLat
-     * 已经转换成 WGS84，因此这里明确传 WGS84。
-     */
-    const weather =
-      await getCurrentWeather(
-        lng,
-        lat,
-        'WGS84'
-      )
-
-    /*
-     * 如果用户已经选择了其他地点，
-     * 忽略之前位置返回的旧天气。
-     */
-    if (
-      currentSequence !==
-      weatherRequestSequence
-    ) {
-      return
-    }
-
-    weatherDetail.value = weather
-
-    /*
-     * 使用百度返回的天气原文，
-     * 例如：晴、小雨、阵雨、雷阵雨。
-     */
-    if (weather?.text) {
-      form.weather =
-        String(weather.text).trim()
-    }
-
-    if (!options.silent) {
-      const temperature =
-        weather?.temperatureC !== null &&
-        weather?.temperatureC !== undefined
-          ? `，${weather.temperatureC}℃`
-          : ''
-
-      ElMessage.success(
-        `已自动获取天气：${
-          weather?.text || '未知'
-        }${temperature}`
-      )
-    }
-  } catch (error) {
-    if (
-      currentSequence !==
-      weatherRequestSequence
-    ) {
-      return
-    }
-
-    console.warn(
-      '[ReportAccident] 获取实时天气失败：',
-      error
-    )
-
-    weatherDetail.value = null
-    weatherError.value =
-      error?.response?.data?.message ||
-      error?.message ||
-      '实时天气获取失败'
-
-    /*
-     * 天气接口失败不能阻止事故地点选择，
-     * 用户仍可手动选择天气。
-     */
-    if (!options.silent) {
-      ElMessage.warning(
-        `${weatherError.value}，请手动选择天气`
-      )
-    }
-  } finally {
-    if (
-      currentSequence ===
-      weatherRequestSequence
-    ) {
-      weatherLoading.value = false
-    }
-  }
-}
-
-/**
- * 地图选点时防抖查询天气。
- *
- * 用户连续点击地图时只查询最后一次选中的位置，
- * 减少百度天气接口调用次数。
- */
-function scheduleWeatherQuery(
-  longitude,
-  latitude
-) {
-  if (weatherQueryTimer) {
-    window.clearTimeout(
-      weatherQueryTimer
-    )
-  }
-
-  weatherQueryTimer =
-    window.setTimeout(() => {
-      fillWeatherByLocation(
-        longitude,
-        latitude,
-        {
-          silent: true,
-        }
-      )
-    }, 500)
-}
-
-/**
- * 清除当前天气信息。
- */
-function clearWeather() {
-  /*
-   * 让正在执行的旧请求失效。
-   */
-  weatherRequestSequence += 1
-
-  if (weatherQueryTimer) {
-    window.clearTimeout(
-      weatherQueryTimer
-    )
-
-    weatherQueryTimer = null
-  }
-
-  weatherLoading.value = false
-  weatherDetail.value = null
-  weatherError.value = ''
-  form.weather = ''
-}
-
-
 // ====== 地图位置选取 ======
 /** 用户在地图上点击选位时触发（坐标来自百度地图，为 BD09） */
-/**
- * 用户在百度地图上点击选位。
- *
- * MapCard 返回 BD09 坐标；
- * 表单和后端事故数据使用 WGS84，
- * 因此先转换，再查询天气。
- */
 function onMapLocationSelect(data) {
-  if (
-    !data ||
-    !Number.isFinite(Number(data.lng)) ||
-    !Number.isFinite(Number(data.lat))
-  ) {
-    return
-  }
-
-  const wgs84 = bd09ToWgs84(
-    Number(data.lng),
-    Number(data.lat)
-  )
+  // data 包含 BD09 的 lng、lat 和地址信息
+  // 转换 BD09 为 WGS84 用于后端存储
+  const wgs84 = bd09ToWgs84(data.lng, data.lat)
 
   form.locationLat = wgs84.lat
   form.locationLng = wgs84.lng
+  form.locationName = data.address || data.formattedAddress || form.customLocation || '地图选点'
+  form.locationStr = data.formattedAddress || data.address || data.semanticDescription || `${wgs84.lat.toFixed(4)}, ${wgs84.lng.toFixed(4)}`
 
-  form.locationName =
-    data.address ||
-    data.formattedAddress ||
-    form.customLocation ||
-    '地图选点'
-
-  form.locationStr =
-    data.formattedAddress ||
-    data.address ||
-    data.semanticDescription ||
-    `${wgs84.lat.toFixed(4)}, ${wgs84.lng.toFixed(4)}`
-
-  /*
-   * 选点后自动查询该地点实时天气。
-   */
-  scheduleWeatherQuery(
-    wgs84.lng,
-    wgs84.lat
-  )
+  // 地图中心自动跟随选择点（MapCard 已 panTo）
 }
-
 /** 用户点击「确认」按钮 */
-/**
- * 用户确认地图选点。
- */
-async function onMapLocationConfirm(
-  data
-) {
+function onMapLocationConfirm(data) {
+  // 复用 onMapLocationSelect 逻辑
   if (data) {
-    const lng = Number(data.lng)
-    const lat = Number(data.lat)
-
-    if (
-      Number.isFinite(lng) &&
-      Number.isFinite(lat)
-    ) {
-      const wgs84 =
-        bd09ToWgs84(
-          lng,
-          lat
-        )
-
-      form.locationLat =
-        wgs84.lat
-
-      form.locationLng =
-        wgs84.lng
-
-      form.locationName =
-        data.address ||
-        data.formattedAddress ||
-        form.locationName
-
-      form.locationStr =
-        data.formattedAddress ||
-        data.address ||
-        form.locationStr
-
-      /*
-       * 取消尚未执行的防抖请求，
-       * 确认位置后立即查询天气。
-       */
-      if (weatherQueryTimer) {
-        window.clearTimeout(
-          weatherQueryTimer
-        )
-
-        weatherQueryTimer = null
-      }
-
-      await fillWeatherByLocation(
-        wgs84.lng,
-        wgs84.lat
-      )
-    }
+    const wgs84 = bd09ToWgs84(data.lng, data.lat)
+    form.locationLat = wgs84.lat
+    form.locationLng = wgs84.lng
+    form.locationName = data.address || form.locationName
+    form.locationStr = data.address || form.locationStr
   }
-
-  ElMessage.success(
-    `已选择位置：${form.locationStr}`
-  )
+  ElMessage.success(`已选择位置：${form.locationStr}`)
 }
-
 
 // ====== 自动定位 ======
 async function handleAutoLocate() {
@@ -1270,30 +848,9 @@ async function handleAutoLocate() {
     form.locationName = addressText
     form.locationStr = addressText
     form.customLocation = addressText
+    setMapCenterToWgs84(lng, lat)
 
-    setMapCenterToWgs84(
-      lng,
-      lat
-    )
-
-    /*
-    * 定位成功后，立即查询事故地点的实时天气。
-    */
-    await fillWeatherByLocation(
-      lng,
-      lat
-    )
-
-    if (source === 'IP') {
-      ElMessage.info(
-        `IP 定位成功：${addressText}`
-      )
-    } else {
-      ElMessage.success(
-        '定位成功'
-      )
-    }
-
+    source === 'IP' ? ElMessage.info(`IP 定位成功：${addressText}`) : ElMessage.success('定位成功')
   } catch (err) {
     ElMessage.error(err.message || '定位失败')
   } finally {
@@ -1311,19 +868,10 @@ async function setMapCenterToWgs84(lng, lat) {
 function clearLocation() {
   form.locationStr = ''
   form.locationName = ''
-  form.customLocation = ''
   form.locationLat = null
   form.locationLng = null
-
   mapCenter.value = null
-
-  /*
-   * 地点清除后，天气也应清除，
-   * 防止提交上一个地点的天气。
-   */
-  clearWeather()
 }
-
 
 // ====== 提交 ======
 async function handleSubmit() {
@@ -1435,7 +983,7 @@ function handleReset() {
   form.occupiedLanes = null
   form.trafficFlow = null
   form.peopleFlow = null
-  clearWeather()
+  form.weather = ''
   form.roadLevel = ''
   form.roadStatus = ''
   form.peopleInvolved = null
@@ -1504,10 +1052,6 @@ function stopPredictionPolling() {
     predictionTimer = null
   }
 }
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateFormLayout)
-})
 </script>
 
 <style lang="scss" scoped>
@@ -1835,154 +1379,6 @@ onUnmounted(() => {
   :deep(.el-input-number),
   :deep(.el-select) {
     width: 100%;
-  }
-
-.weather-field {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-width: 0;
-
-  :deep(.el-select) {
-    width: 100%;
-  }
-}
-
-.weather-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-
-  .weather-main {
-    color: #2563eb;
-    font-weight: 600;
-  }
-
-  &.is-loading {
-    color: #2563eb;
-  }
-
-  &.is-error {
-    color: #d97706;
-  }
-}
-
-}
-
-/* ====== 移动端适配 (≤768px) ====== */
-@media (max-width: 768px) {
-  .report-page {
-    max-width: 100%;
-    padding: 0 6px;
-  }
-
-  .page-header {
-    h2 { font-size: 18px; }
-    p { font-size: 12px; }
-  }
-
-  .page-card {
-    padding: 12px 8px;
-    border-radius: 8px;
-  }
-
-    :deep(.report-form) {
-    .el-form-item {
-      display: block;
-      margin-bottom: 18px;
-    }
-
-    .el-form-item__label {
-      display: block !important;
-      float: none !important;
-      width: 100% !important;
-      max-width: 100% !important;
-      text-align: left !important;
-      justify-content: flex-start !important;
-      line-height: 1.4;
-      padding: 0 0 8px !important;
-      margin: 0 !important;
-      font-size: 13px;
-      font-weight: 600;
-      height: auto !important;
-    }
-
-    .el-form-item__content {
-      display: block;
-      margin-left: 0 !important;
-      width: 100% !important;
-    }
-  }
-
-  :deep(.el-form-item__label-wrap) {
-    margin-left: 0 !important;
-  }
-
-  /* 地点选择器 */
-  .location-picker {
-    flex-direction: column;
-
-    .location-input {
-      min-width: 100%;
-    }
-  }
-
-  /* 场景标签 checkbox 组 */
-  .scene-labels {
-    grid-template-columns: repeat(2, 1fr) !important;
-  }
-
-  /* 视频录制区 */
-  .video-recorder {
-    .video-placeholder {
-      .video-choice {
-        grid-template-columns: 1fr;
-      }
-
-      .video-choice-divider {
-        width: 100%;
-        height: 1px;
-      }
-    }
-  }
-
-  /* 提交前摘要 */
-  .submission-summary {
-    .summary-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* 结果弹窗 */
-  :deep(.public-report-dialog) {
-    width: 94% !important;
-    max-width: 420px;
-
-    .result-section {
-      h4 { font-size: 14px; }
-    }
-  }
-
-  :deep(.el-descriptions) {
-    .el-descriptions__label {
-      width: 70px;
-      font-size: 11px;
-    }
-    .el-descriptions__content {
-      font-size: 12px;
-    }
-  }
-
-  /* 按钮全宽 */
-  .submission-actions .el-button {
-    width: 100%;
-    height: 44px;
-    font-size: 15px;
   }
 }
 

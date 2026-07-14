@@ -1,6 +1,8 @@
 """
 事故风险预测专家系统 - FastAPI 主服务
 """
+from __future__ import annotations
+
 import logging
 import sys
 from contextlib import asynccontextmanager

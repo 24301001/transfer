@@ -22,8 +22,8 @@
     >
       <el-row :gutter="16">
         <!-- 基本信息 -->
-        <el-col :xs="24" :sm="24" :md="24" :lg="16" class="left-col">
-          <div class="page-card left-card">
+        <el-col :span="16">
+          <div class="page-card">
             <div class="detail-header">
               <div>
                 <h2>
@@ -60,7 +60,7 @@
             <el-divider />
 
             <el-descriptions
-              :column="descColumns"
+              :column="2"
               border
             >
               <el-descriptions-item
@@ -99,28 +99,41 @@
             </el-descriptions>
 
             <!--
+<<<<<<< Updated upstream
               地图显示事故地点。
 
               点击地图时不再读取浏览器定位，
               而是由后端根据当前任务绑定的车辆 ID，
               查询数据库中的车辆经纬度作为导航起点，
               再生成“救援车辆位置 → 事故地点”的导航路线。
+=======
+              地图仍然显示事故地点。
+
+              点击地图时：
+              1. 获取清障人员当前位置
+              2. 将当前位置发送给后端
+              3. 使用后端返回的 navigationUrl 打开导航
+>>>>>>> Stashed changes
             -->
-            <div class="map-wrapper">
-              <MapCard
-                height="100%"
-                :title="task.location?.name"
-                :hint="
-                  navigationLoading
-                    ? '正在读取调度车辆位置…'
-                    : '点击从调度车辆位置开始导航'
-                "
-                :markers="mapMarkers"
-                :center="mapCenter"
-                :zoom="15"
-                @click="handleNavigate"
-              />
-            </div>
+            <MapCard
+              :height="'200px'"
+              :title="task.location?.name"
+              :hint="
+                navigationLoading
+<<<<<<< Updated upstream
+                  ? '正在读取调度车辆位置…'
+                  : '点击从调度车辆位置开始导航'
+=======
+                  ? '正在获取当前位置…'
+                  : '点击自动定位并导航'
+>>>>>>> Stashed changes
+              "
+              :markers="mapMarkers"
+              :center="mapCenter"
+              :zoom="15"
+              style="margin-top: 12px"
+              @click="handleNavigate"
+            />
 
             <div class="navigation-tip">
               <el-icon>
@@ -128,7 +141,11 @@
               </el-icon>
 
               <span>
+<<<<<<< Updated upstream
                 点击地图后，将使用该任务所选救援车辆在数据库中的经纬度作为起点，导航至事故地点。
+=======
+                点击地图后将自动获取当前位置，并导航至事故地点。
+>>>>>>> Stashed changes
               </span>
             </div>
 
@@ -142,7 +159,7 @@
               </h3>
 
               <el-descriptions
-                :column="descColumns"
+                :column="2"
                 border
                 size="small"
               >
@@ -174,7 +191,7 @@
         </el-col>
 
         <!-- 右侧：现场风险、处置建议、状态更新 -->
-        <el-col :xs="24" :sm="24" :md="24" :lg="8" class="right-col">
+        <el-col :span="8">
           <!-- 现场风险 -->
           <div
             class="page-card"
@@ -409,7 +426,6 @@
 import {
   computed,
   onMounted,
-  onUnmounted,
   ref,
 } from 'vue'
 
@@ -438,6 +454,10 @@ import {
 } from '@/services/modules/dispatch'
 
 import {
+<<<<<<< Updated upstream
+=======
+  getRealCurrentPosition,
+>>>>>>> Stashed changes
   wgs84ToBd09,
 } from '@/utils/location'
 
@@ -481,13 +501,6 @@ const stepIndex = computed(() => {
 
   return map[task.value?.status] ?? 0
 })
-
-const isMobile = ref(false)
-const descColumns = computed(() => (isMobile.value ? 1 : 2))
-
-function updateMobileFlag() {
-  isMobile.value = window.matchMedia('(max-width: 768px)').matches
-}
 
 /**
  * 事故地点标记。
@@ -585,12 +598,24 @@ async function fetchDetail() {
 }
 
 /**
+<<<<<<< Updated upstream
  * 使用任务绑定车辆的数据库坐标打开导航。
  *
  * 前端不再调用浏览器定位 API，也不再向后端传入
  * 浏览器当前位置。后端会根据 taskId 找到该任务绑定的
  * emergencyVehicleId，并使用车辆表/任务快照中的经纬度
  * 作为起点，事故经纬度作为终点生成 navigationUrl。
+=======
+ * 自动定位并打开导航。
+ *
+ * 原来的事故地点和导航逻辑全部保留，
+ * 这里只是在请求导航链接之前增加：
+ *
+ * 1. 获取清障人员当前 GPS 坐标；
+ * 2. 将当前位置传给后端；
+ * 3. 后端生成当前位置到事故地点的 navigationUrl；
+ * 4. 打开导航页面。
+>>>>>>> Stashed changes
  */
 async function handleNavigate() {
   if (navigationLoading.value) {
@@ -606,6 +631,7 @@ async function handleNavigate() {
     return
   }
 
+<<<<<<< Updated upstream
   if (!task.value?.vehicleId) {
     ElMessage.warning(
       '当前任务尚未绑定救援车辆，无法生成导航路线'
@@ -613,13 +639,20 @@ async function handleNavigate() {
     return
   }
 
+=======
+>>>>>>> Stashed changes
   navigationLoading.value = true
 
   /*
    * 点击时立即创建新窗口。
    *
+<<<<<<< Updated upstream
    * 接口请求是异步操作。如果等待请求结束后再调用
    * window.open，部分手机浏览器会把它当作弹窗拦截。
+=======
+   * 定位和接口请求都是异步操作。如果等待它们完成以后
+   * 再调用 window.open，部分手机浏览器会拦截导航窗口。
+>>>>>>> Stashed changes
    */
   const navigationWindow =
     window.open(
@@ -630,12 +663,17 @@ async function handleNavigate() {
   const loadingMessage =
     ElMessage.info({
       message:
+<<<<<<< Updated upstream
         '正在读取调度车辆位置并生成导航…',
+=======
+        '正在获取当前位置并生成导航…',
+>>>>>>> Stashed changes
       duration: 0,
     })
 
   try {
     /*
+<<<<<<< Updated upstream
      * 这里只传 taskId。
      *
      * 不传 longitude、latitude，也不读取浏览器定位。
@@ -645,6 +683,24 @@ async function handleNavigate() {
     const res =
       await getClearanceRescueDetail(
         taskId
+=======
+     * 项目现有函数。
+     *
+     * navigator.geolocation 返回的是
+     * WGS84 GPS 坐标，无需转换成 BD09 后再传后端。
+     */
+    const currentPosition =
+      await getRealCurrentPosition()
+
+    const res =
+      await getClearanceRescueDetail(
+        taskId,
+        {
+          lng: currentPosition.lng,
+          lat: currentPosition.lat,
+          coordinateType: 'WGS84',
+        }
+>>>>>>> Stashed changes
       )
 
     const navigationUrl =
@@ -652,7 +708,11 @@ async function handleNavigate() {
 
     if (!navigationUrl) {
       throw new Error(
+<<<<<<< Updated upstream
         '无法生成导航路线，请确认已选择车辆，且车辆数据库经纬度完整'
+=======
+        '后端未返回导航链接'
+>>>>>>> Stashed changes
       )
     }
 
@@ -678,13 +738,21 @@ async function handleNavigate() {
     }
 
     console.error(
+<<<<<<< Updated upstream
       '[TaskDetail] 车辆位置导航失败：',
+=======
+      '[TaskDetail] 自动定位导航失败：',
+>>>>>>> Stashed changes
       error
     )
 
     ElMessage.error(
       error?.message ||
+<<<<<<< Updated upstream
       '车辆位置导航失败，请检查车辆经纬度数据'
+=======
+      '自动定位导航失败，请检查定位权限'
+>>>>>>> Stashed changes
     )
   } finally {
     loadingMessage.close()
@@ -751,15 +819,7 @@ async function confirmComplete() {
   feedbackForm.value.feedback = ''
 }
 
-onMounted(() => {
-  updateMobileFlag()
-  window.addEventListener('resize', updateMobileFlag)
-  fetchDetail()
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateMobileFlag)
-})
+onMounted(fetchDetail)
 </script>
 
 <style lang="scss" scoped>
@@ -768,30 +828,6 @@ onUnmounted(() => {
 .task-detail-page {
   max-width: 1100px;
   margin: 0 auto;
-}
-
-.detail-row {
-  align-items: stretch;
-}
-
-.left-col {
-  display: flex;
-  flex-direction: column;
-}
-
-.left-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.map-wrapper {
-  flex: 1;
-  min-height: 350px;
-  margin-top: 12px;
-  border-radius: 10px;
-  overflow: hidden;
 }
 
 .back-bar {
@@ -904,63 +940,6 @@ onUnmounted(() => {
     color: $text-primary;
     font-size: 13px;
     line-height: 1.6;
-  }
-}
-
-/* ====== 移动端适配 (≤768px) ====== */
-/* ====== mobile <=768px ====== */
-@media (max-width: 768px) {
-  .task-detail-page {
-    max-width: 100%;
-    padding: 0;
-  }
-
-  .left-col,
-  .right-col {
-    max-width: 100% !important;
-    flex: 0 0 100% !important;
-    margin-bottom: 12px;
-  }
-
-  .page-card {
-    padding: 16px;
-  }
-
-  .detail-header {
-    flex-direction: column;
-    gap: 10px;
-
-    h2 { font-size: 17px; }
-    .header-meta { flex-wrap: wrap; gap: 8px; font-size: 12px; }
-    .header-tags { align-self: flex-start; }
-  }
-
-  .map-wrapper {
-    min-height: 220px;
-  }
-
-  .el-descriptions {
-    :deep(.el-descriptions__label) {
-      width: 72px;
-      font-size: 11px;
-    }
-    :deep(.el-descriptions__content) {
-      font-size: 12px;
-    }
-  }
-
-  .status-actions .el-button--large {
-    height: 44px;
-    font-size: 14px;
-  }
-
-  .section-title {
-    font-size: 14px;
-  }
-
-  :deep(.el-dialog) {
-    width: 92% !important;
-    max-width: 450px;
   }
 }
 </style>

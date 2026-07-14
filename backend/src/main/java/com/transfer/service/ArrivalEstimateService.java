@@ -14,8 +14,9 @@ public class ArrivalEstimateService {
             Incident incident
     ) {
         int minutes = estimateMinutes(incident);
-        // 前端暂不展示预计到达文案，仅保留分钟数供内部使用
-        String text = "";
+        String text = "预计交警约 "
+                + minutes
+                + " 分钟到达，具体以指挥中心实际派警为准。";
 
         return new IncidentArrivalEstimateResponse(
                 incident.getId(),

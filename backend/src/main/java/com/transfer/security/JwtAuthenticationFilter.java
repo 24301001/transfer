@@ -99,8 +99,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
         }
 
-        // Native EventSource cannot set Authorization headers. Only the SSE endpoint accepts access_token.
-        if ("/api/v1/realtime/road-risk/stream".equals(request.getRequestURI())) {
+        // Native EventSource and HTML media elements cannot set Authorization headers.
+        // Only the SSE endpoint and the command-center AI media proxy accept access_token.
+        String requestUri = request.getRequestURI();
+        boolean queryTokenSupported =
+                "/api/v1/realtime/road-risk/stream".equals(requestUri)
+                        || pathMatcher.match(
+                        "/api/v1/command-center/incidents/*/ai-attachments/*/content",
+                        requestUri
+                );
+
+        if (queryTokenSupported) {
             String queryToken = request.getParameter("access_token");
             if (queryToken != null && !queryToken.isBlank()) {
                 return queryToken.trim();

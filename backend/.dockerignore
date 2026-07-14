@@ -1,0 +1,12 @@
+target/
+.git/
+.idea/
+.vscode/
+*.iml
+*.log
+.env
+uploads/
+ai-media-cache/
+Dockerfile*
+docker-compose*.yml
+README*

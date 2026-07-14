@@ -900,26 +900,26 @@ public class BaiduMapProvider implements MapProvider {
         return "https://api.map.baidu.com/direction"
 
                 + "?origin="
-                + encode(origin)
+
+                + encode(
+
+                        origin
+                )
 
                 + "&destination="
-                + encode(destination)
+
+                + encode(
+
+                        destination
+                )
 
                 + "&mode=driving"
-
-                /*
-                * 当前测试车辆和事故都在北京，
-                * 明确告诉百度起点、终点属于北京。
-                */
-                + "&region="
-                + encode("北京")
 
                 + "&coord_type=bd09ll"
 
                 + "&output=html"
 
                 + "&src=webapp.transfer.traffic";
-
     }
 
 
