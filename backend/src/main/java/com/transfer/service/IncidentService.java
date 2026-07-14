@@ -40,6 +40,7 @@ import com.transfer.dto.PredictionAttachmentPayload;
 import com.transfer.dto.PredictionDisplayResponse;
 import com.transfer.dto.PredictionModuleResultRequest;
 import com.transfer.dto.PredictionRequest;
+import com.transfer.dto.PredictionStatusResponse;
 import com.transfer.dto.PredictionSubmitResponse;
 import com.transfer.dto.PublicIncidentSubmitResponse;
 import com.transfer.enums.CoordinateType;
@@ -325,6 +326,9 @@ public class IncidentService {
     ) {
         Incident incident = create(request);
 
+        incident.setTrackingToken(java.util.UUID.randomUUID().toString());
+        incident = incidentRepository.save(incident);
+
         uploadOptionalFiles(
                 incident.getId(),
                 photos,
@@ -353,25 +357,56 @@ public class IncidentService {
                 attachmentRepository.findByIncidentId(incident.getId());
         runYoloDetection(incident, allAttachments, photos, videos, video);
 
-        CitizenImmediateAdviceResponse immediateAdvice =
-                citizenAiService.generateImmediateAdvice(incident);
+        /*
+         * 生成即时安全提示（AI）。
+         * 异常时使用保底文案，不阻断事故上报流程。
+         */
+        CitizenImmediateAdviceResponse immediateAdvice = null;
+        try {
+            immediateAdvice =
+                    citizenAiService.generateImmediateAdvice(incident);
+        } catch (Exception e) {
+            log.warn(
+                    "生成即时安全提示失败: incidentId={}, error={}",
+                    incident.getId(),
+                    e.getMessage()
+            );
+        }
 
-        incident.setCitizenImmediateAdvice(
-                immediateAdvice.immediateAdvice()
-        );
-        incident.setCasualtyDetected(
-                Boolean.TRUE.equals(
-                        immediateAdvice.casualtyDetected()
-                )
-        );
+        if (immediateAdvice != null) {
+            incident.setCitizenImmediateAdvice(
+                    immediateAdvice.immediateAdvice()
+            );
+            incident.setCasualtyDetected(
+                    Boolean.TRUE.equals(
+                            immediateAdvice.casualtyDetected()
+                    )
+            );
+        } else {
+            incident.setCitizenImmediateAdvice(
+                    "信息已提交，请先保证自身安全，保持手机畅通。"
+            );
+        }
         incident = incidentRepository.save(incident);
 
+        /*
+         * 提交数据预测模块。
+         * 异常时返回 null，不阻断事故上报流程。
+         */
         PredictionSubmitResponse predictionSubmit = null;
         if (autoSubmitPredictionOnPublicReport) {
-            predictionSubmit = submitPredictionRequest(
-                    incident.getId(),
-                    request.reportUserId()
-            );
+            try {
+                predictionSubmit = submitPredictionRequest(
+                        incident.getId(),
+                        request.reportUserId()
+                );
+            } catch (Exception e) {
+                log.error(
+                        "提交预测请求失败: incidentId={}, error={}",
+                        incident.getId(),
+                        e.getMessage()
+                );
+            }
         }
 
         return new PublicIncidentSubmitResponse(
@@ -379,7 +414,8 @@ public class IncidentService {
                 immediateAdvice,
                 incident.getEstimatedPoliceArrivalMinutes(),
                 incident.getPoliceArrivalText(),
-                predictionSubmit
+                predictionSubmit,
+                incident.getTrackingToken()
         );
     }
 
@@ -1264,6 +1300,47 @@ public PredictionDisplayResponse regenerateLatestPredictionExplanation(
         return PredictionDisplayResponse.from(
                 incident,
                 result
+        );
+    }
+
+    /**
+     * 市民匿名查询预测状态（通过 trackingToken 验证）。
+     *
+     * @return 处理中返回 {status:"PROCESSING", completed:false}，
+     *         完成后返回 {status:"COMPLETED", completed:true, result:...}
+     */
+    @Transactional(readOnly = true)
+    public PredictionStatusResponse findPredictionStatus(
+            Long incidentId,
+            String trackingToken
+    ) {
+        Incident incident = findIncident(incidentId);
+
+        if (incident.getTrackingToken() == null
+                || !incident.getTrackingToken().equals(trackingToken)) {
+            throw new ResourceNotFoundException(
+                    "Incident not found or invalid tracking token"
+            );
+        }
+
+        PredictionResult result = predictionResultRepository
+                .findFirstByIncidentIdOrderByCreatedAtDesc(incidentId)
+                .orElse(null);
+
+        if (result == null) {
+            return new PredictionStatusResponse(
+                    "PROCESSING",
+                    false,
+                    null,
+                    "事故预测正在处理中，预计约1分钟完成"
+            );
+        }
+
+        return new PredictionStatusResponse(
+                "COMPLETED",
+                true,
+                PredictionDisplayResponse.from(incident, result),
+                "事故预测已完成"
         );
     }
 
