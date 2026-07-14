@@ -62,14 +62,17 @@
       <section class="hud-panel chart-panel">
         <div class="panel-heading">
           <div>
-            <h2>事故类型分布</h2>
-            <p>ACCIDENT TYPE DISTRIBUTION</p>
+            <h2>事故场景分布</h2>
+            <p>ACCIDENT SCENE DISTRIBUTION</p>
           </div>
-          <MapCard
-            height="100%"
-            title="指挥大屏地图"
-            :hint="mapMarkers.length + ' 起事故'"
-            :markers="mapMarkers"
+          <span class="panel-total">全部数据</span>
+        </div>
+        <div class="chart-body">
+          <CommandSemiGauge
+            :data="sceneChartData"
+            :selected-name="activeChartFilter.dimension === 'scene' ? activeChartFilter.value : ''"
+            total-label="场景总量"
+            @select="(name) => handleChartSelect('scene', name)"
           />
         </div>
       </section>
@@ -821,9 +824,33 @@ function countBy(list, field) {
     .sort((a, b) => b.value - a.value)
 }
 
+/** 按 sceneLabels 数组展开统计每个标签出现次数 */
+function countBySceneLabels(list) {
+  const result = new Map()
+  list.forEach((item) => {
+    const labels = item?.sceneLabels || []
+    labels.forEach((label) => {
+      if (label) result.set(label, (result.get(label) || 0) + 1)
+    })
+  })
+  return Array.from(result.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+}
+
+const sceneChartSource = computed(() => {
+  if (activeChartFilter.dimension === 'status' && activeChartFilter.value) {
+    return allAccidents.value.filter((item) => item.status === activeChartFilter.value)
+  }
+  return allAccidents.value
+})
+
 const typeChartSource = computed(() => {
   if (activeChartFilter.dimension === 'status' && activeChartFilter.value) {
     return allAccidents.value.filter((item) => item.status === activeChartFilter.value)
+  }
+  if (activeChartFilter.dimension === 'scene' && activeChartFilter.value) {
+    return allAccidents.value.filter((item) => (item.sceneLabels || []).includes(activeChartFilter.value))
   }
   return allAccidents.value
 })
@@ -832,9 +859,13 @@ const statusChartSource = computed(() => {
   if (activeChartFilter.dimension === 'type' && activeChartFilter.value) {
     return allAccidents.value.filter((item) => item.type === activeChartFilter.value)
   }
+  if (activeChartFilter.dimension === 'scene' && activeChartFilter.value) {
+    return allAccidents.value.filter((item) => (item.sceneLabels || []).includes(activeChartFilter.value))
+  }
   return allAccidents.value
 })
 
+const sceneChartData = computed(() => countBySceneLabels(sceneChartSource.value))
 const typeChartData = computed(() => countBy(typeChartSource.value, 'type'))
 const statusChartData = computed(() => countBy(statusChartSource.value, 'status'))
 const accidentTypeOptions = computed(() => Array.from(new Set(allAccidents.value.map((item) => item.type).filter(Boolean))).sort())
@@ -851,6 +882,9 @@ function handleChartSelect(dimension, value) {
 
 function matchesChartFilter(accident) {
   if (!activeChartFilter.value) return true
+  if (activeChartFilter.dimension === 'scene') {
+    return (accident.sceneLabels || []).includes(activeChartFilter.value)
+  }
   return activeChartFilter.dimension === 'type'
     ? accident.type === activeChartFilter.value
     : accident.status === activeChartFilter.value
@@ -923,6 +957,9 @@ const filteredTasks = computed(() => {
       const accident = relatedAccident(task)
       if (activeChartFilter.dimension === 'type') {
         return (task.accidentType || accident?.type) === activeChartFilter.value
+      }
+      if (activeChartFilter.dimension === 'scene') {
+        return (accident?.sceneLabels || []).includes(activeChartFilter.value)
       }
       return accident?.status === activeChartFilter.value
     })
