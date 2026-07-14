@@ -6,6 +6,7 @@ import com.transfer.dto.IncidentDetailResponse;
 import com.transfer.dto.PredictionDisplayResponse;
 import com.transfer.dto.PredictionModuleResultRequest;
 import com.transfer.dto.PredictionRequest;
+import com.transfer.dto.PredictionStatusResponse;
 import com.transfer.dto.PredictionSubmitResponse;
 import com.transfer.dto.PublicIncidentSubmitResponse;
 import com.transfer.enums.IncidentStatus;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -178,6 +180,14 @@ public class IncidentController {
     @GetMapping("/{incidentId}/prediction-result/latest")
     public PredictionDisplayResponse findLatestPrediction(@PathVariable Long incidentId) {
         return incidentService.findLatestPrediction(incidentId);
+    }
+
+    @GetMapping("/public/{incidentId}/prediction-status")
+    public PredictionStatusResponse findPredictionStatus(
+            @PathVariable Long incidentId,
+            @RequestHeader("X-Tracking-Token") String trackingToken
+    ) {
+        return incidentService.findPredictionStatus(incidentId, trackingToken);
     }
 
     @GetMapping("/{incidentId}/arrival-estimate")

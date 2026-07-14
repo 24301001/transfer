@@ -5,6 +5,7 @@ public record PublicIncidentSubmitResponse(
         CitizenImmediateAdviceResponse immediateAdvice,
         Integer estimatedPoliceArrivalMinutes,
         String estimatedPoliceArrivalText,
-        PredictionSubmitResponse predictionSubmit
+        PredictionSubmitResponse predictionSubmit,
+        String trackingToken
 ) {
 }

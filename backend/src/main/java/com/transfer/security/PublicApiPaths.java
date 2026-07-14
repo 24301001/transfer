@@ -21,6 +21,7 @@ public final class PublicApiPaths {
             "/api/v1/auth/login",
             "/api/v1/auth/password/reset",
             "/api/v1/incidents/public-report",
+            "/api/v1/incidents/public/*/prediction-status",
             "/api/v1/report-ai/**",
             "/api/v1/maps/client-config",
             "/v3/api-docs/**",

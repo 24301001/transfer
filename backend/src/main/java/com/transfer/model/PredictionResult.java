@@ -1,4 +1,4 @@
-﻿package com.transfer.model;
+package com.transfer.model;
 
 import com.transfer.enums.RiskLevel;
 import jakarta.persistence.Column;

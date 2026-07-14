@@ -169,6 +169,12 @@ public class Incident extends AuditableEntity {
 
     private Long reportUserId;
 
+    /**
+     * 匿名查询令牌，用于市民上报后免登录查询预测结果。
+     */
+    @Column(length = 64, unique = true)
+    private String trackingToken;
+
     public String getIncidentNo() {
         return incidentNo;
     }
@@ -495,6 +501,14 @@ public class Incident extends AuditableEntity {
 
     public void setReportUserId(Long reportUserId) {
         this.reportUserId = reportUserId;
+    }
+
+    public String getTrackingToken() {
+        return trackingToken;
+    }
+
+    public void setTrackingToken(String trackingToken) {
+        this.trackingToken = trackingToken;
     }
 
     public Integer getPeopleInvolved() {

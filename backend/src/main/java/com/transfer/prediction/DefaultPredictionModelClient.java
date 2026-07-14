@@ -1,5 +1,7 @@
 package com.transfer.prediction;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.transfer.dto.PredictionAttachmentPayload;
 import com.transfer.dto.WeatherFeaturePayload;
 import com.transfer.enums.CoordinateType;
 import com.transfer.service.BaiduWeatherService;
@@ -14,6 +16,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
+
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -33,6 +37,9 @@ public class DefaultPredictionModelClient
 
     private static final Logger log =
             LoggerFactory.getLogger(DefaultPredictionModelClient.class);
+
+    private static final ObjectMapper OBJECT_MAPPER =
+            new ObjectMapper();
 
     private final RestClient restClient;
     private final BaiduWeatherService weatherService;
@@ -154,13 +161,28 @@ public class DefaultPredictionModelClient
                 enrichWeather(request);
 
         try {
+            List<PredictionAttachmentPayload> attachments =
+                    enrichedRequest.attachments();
+
+            if (attachments != null && !attachments.isEmpty()) {
+                PredictionAttachmentPayload first =
+                        attachments.get(0);
+                log.info(
+                        "已为预测请求添加视频附件: file={}, size={}B",
+                        first.originalFilename(),
+                        first.fileSize()
+                );
+            }
+
             PredictionModuleResponse response =
                     restClient
                             .post()
                             .uri(predictPath)
                             .body(enrichedRequest)
                             .retrieve()
-                            .body(PredictionModuleResponse.class);
+                            .body(
+                                    PredictionModuleResponse.class
+                            );
 
             if (response == null) {
                 return new PredictionModuleResponse(
