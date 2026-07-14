@@ -308,11 +308,20 @@
         </div>
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="事故编号">{{ selectedAccident.caseNo }}</el-descriptions-item>
-          <el-descriptions-item label="事故类型">{{ selectedAccident.type }}</el-descriptions-item>
+          <el-descriptions-item label="场景识别">
+            <div class="drawer-tags">
+              <el-tag
+                v-for="label in (drawerDetail || selectedAccident).sceneLabels"
+                :key="label"
+                size="small"
+                effect="plain"
+              >{{ label }}</el-tag>
+              <span v-if="!(drawerDetail || selectedAccident).sceneLabels?.length" class="text-muted">-</span>
+            </div>
+          </el-descriptions-item>
           <el-descriptions-item label="风险等级">
             <RiskBadge :level="selectedAccident.riskLevel" size="small" />
           </el-descriptions-item>
-          <el-descriptions-item label="风险评分">{{ selectedAccident.riskScore }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(selectedAccident.status)" size="small" effect="plain">
               {{ selectedAccident.status }}
@@ -320,25 +329,12 @@
           </el-descriptions-item>
           <el-descriptions-item label="地点">{{ selectedAccident.location?.name }}</el-descriptions-item>
           <el-descriptions-item label="上报时间">{{ selectedAccident.reportTime }}</el-descriptions-item>
-          <el-descriptions-item label="场景识别" v-if="drawerDetail?.sceneLabels?.length">
-            <div class="drawer-tags">
-              <el-tag
-                v-for="label in drawerDetail.sceneLabels"
-                :key="label"
-                size="small"
-                effect="plain"
-              >
-                {{ label }}
-              </el-tag>
-            </div>
-          </el-descriptions-item>
           <el-descriptions-item label="是否有人受伤">
             <el-tag :type="(drawerDetail || selectedAccident).injuryReported ? 'danger' : 'success'" size="small">
               {{ (drawerDetail || selectedAccident).injuryReported ? '是' : '否' }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="受伤人数">{{ (drawerDetail || selectedAccident).injuredCount || 0 }}人</el-descriptions-item>
-          <el-descriptions-item label="预计拥堵">{{ selectedAccident.congestionDuration }}</el-descriptions-item>
           <el-descriptions-item label="恢复时间">{{ selectedAccident.recoveryTime }}</el-descriptions-item>
           <el-descriptions-item label="影响车道">{{ selectedAccident.affectedLanes }}</el-descriptions-item>
           <el-descriptions-item label="天气">{{ selectedAccident.weather }}</el-descriptions-item>
@@ -420,14 +416,22 @@
         </div>
 
         <el-descriptions :column="1" border size="small">
-          <el-descriptions-item label="事故类型">{{ drawerAccident.type }}</el-descriptions-item>
-          <el-descriptions-item label="风险评分">{{ drawerAccident.riskScore }}</el-descriptions-item>
+          <el-descriptions-item label="场景识别">
+            <div class="drawer-tags">
+              <el-tag
+                v-for="label in drawerAccident.sceneLabels"
+                :key="label"
+                size="small"
+                effect="plain"
+              >{{ label }}</el-tag>
+              <span v-if="!drawerAccident.sceneLabels?.length" class="text-muted">-</span>
+            </div>
+          </el-descriptions-item>
           <el-descriptions-item label="处理状态">
             <span class="status-chip" :class="statusClass(drawerAccident.status)">{{ drawerAccident.status }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="事故地点">{{ drawerAccident.location?.name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="上报时间">{{ drawerAccident.reportTime }}</el-descriptions-item>
-          <el-descriptions-item label="预计拥堵">{{ drawerAccident.congestionDuration }}</el-descriptions-item>
           <el-descriptions-item label="恢复时间">{{ drawerAccident.recoveryTime }}</el-descriptions-item>
           <el-descriptions-item label="影响车道">{{ drawerAccident.affectedLanes }}</el-descriptions-item>
           <el-descriptions-item label="天气 / 道路">{{ drawerAccident.weather }} / {{ drawerAccident.roadLevel }}</el-descriptions-item>
