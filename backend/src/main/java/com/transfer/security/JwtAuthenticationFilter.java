@@ -14,17 +14,43 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final List<String> PUBLIC_PATHS = List.of(
+            "/api/health",
+            "/api/v1/health",
+            "/api/v1/auth/slider-captcha/challenge",
+            "/api/v1/auth/slider-captcha/verify",
+            "/api/v1/auth/email-code",
+            "/api/v1/auth/register",
+            "/api/v1/auth/login",
+            "/api/v1/auth/password/reset",
+            "/api/v1/incidents/public-report",
+            "/api/v1/incidents/public/*/prediction-status",
+            "/api/v1/report-ai/**",
+            "/api/v1/maps/client-config",
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/h2-console/**",
+            "/slider-captcha-demo.html",
+            "/js/**",
+            "/css/**",
+            "/favicon.ico"
+    );
+
     private final JwtAuthenticationService authenticationService;
     private final ObjectMapper objectMapper;
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     public JwtAuthenticationFilter(
             JwtAuthenticationService authenticationService,
@@ -36,11 +62,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = PublicApiPaths.resolvePath(request);
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+        String path = request.getRequestURI();
         if (!path.startsWith("/api/v1/")) {
             return true;
         }
-        return PublicApiPaths.matches(request);
+        return PUBLIC_PATHS.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
     }
 
     @Override
@@ -71,7 +100,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         // Native EventSource cannot set Authorization headers. Only the SSE endpoint accepts access_token.
-        if ("/api/v1/realtime/road-risk/stream".equals(PublicApiPaths.resolvePath(request))) {
+        if ("/api/v1/realtime/road-risk/stream".equals(request.getRequestURI())) {
             String queryToken = request.getParameter("access_token");
             if (queryToken != null && !queryToken.isBlank()) {
                 return queryToken.trim();
