@@ -354,6 +354,59 @@ const indicatorsRef = ref(null)
 const cardWrapRef = ref(null)
 const cardGlowRef = ref(null)
 const cardRef = ref(null)
+/**
+ * 实时天气查询状态。
+ */
+const weatherLoading = ref(false)
+
+/**
+ * 后端返回的完整实时天气数据。
+ */
+const weatherDetail = ref(null)
+
+/**
+ * 天气查询失败提示。
+ */
+const weatherError = ref('')
+
+/**
+ * 百度天气常见天气类型。
+ *
+ * allow-create=true，因此即使百度返回的天气不在列表中，
+ * 例如“雷阵雨伴有冰雹”，也能够正常显示和提交。
+ */
+const WEATHER_OPTIONS = [
+  '晴',
+  '多云',
+  '阴',
+  '阵雨',
+  '雷阵雨',
+  '小雨',
+  '中雨',
+  '大雨',
+  '暴雨',
+  '雨夹雪',
+  '小雪',
+  '中雪',
+  '大雪',
+  '暴雪',
+  '雾',
+  '霾',
+  '浮尘',
+  '扬沙',
+  '沙尘暴',
+]
+
+/**
+ * 防止用户连续点击多个地图位置时，
+ * 较早发出的天气请求覆盖最后一次选择的结果。
+ */
+let weatherRequestSequence = 0
+
+/**
+ * 地图点击天气查询防抖定时器。
+ */
+let weatherQueryTimer = null
 
 function applyMagnetic() {
   if (mouse.x < 0) {
