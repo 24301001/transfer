@@ -512,20 +512,20 @@
             border
             size="small"
           >
-            <el-descriptions-item label="事故类型">
-              {{ predictionResult.accidentType || '-' }}
+            <el-descriptions-item label="场景类别">
+              <template v-if="recognizedSceneLabels.length">
+                <el-tag
+                  v-for="label in recognizedSceneLabels"
+                  :key="label"
+                  size="small"
+                  effect="plain"
+                  style="margin-right:4px;"
+                >{{ label }}</el-tag>
+              </template>
+              <span v-else>-</span>
             </el-descriptions-item>
             <el-descriptions-item label="风险等级">
               <RiskBadge :level="predictionResult.riskLevel" size="small" />
-            </el-descriptions-item>
-            <el-descriptions-item label="风险评分">
-              {{ predictionResult.riskScore != null ? predictionResult.riskScore.toFixed(1) : '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="置信度">
-              {{ predictionResult.confidence != null ? (predictionResult.confidence * 100).toFixed(1) + '%' : '-' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="预计拥堵">
-              {{ predictionResult.congestionDurationMinutes != null ? predictionResult.congestionDurationMinutes + ' 分钟' : '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="预计恢复">
               {{ predictionResult.recoveryDurationMinutes != null ? predictionResult.recoveryDurationMinutes + ' 分钟' : '-' }}
@@ -548,18 +548,6 @@
           />
         </div>
 
-        <!-- 场景识别标签 -->
-        <div v-if="recognizedSceneLabels.length" class="result-section">
-          <h4>场景识别</h4>
-          <el-checkbox-group :model-value="recognizedSceneLabels" disabled>
-            <el-checkbox
-              v-for="label in SCENE_LABEL_OPTIONS"
-              :key="label"
-              :label="label"
-              :value="label"
-            />
-          </el-checkbox-group>
-        </div>
       </div>
 
       <template #footer>
