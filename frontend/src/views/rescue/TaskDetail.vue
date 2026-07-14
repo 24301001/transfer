@@ -235,6 +235,41 @@
             </div>
           </div>
 
+          <!-- 算法4 AI调度推荐 -->
+          <div
+            class="page-card"
+            style="margin-bottom: 16px"
+            v-if="task.dispatchPlan?.length"
+          >
+            <div class="section-header">
+              <h3 class="section-title">AI 调度推荐</h3>
+              <el-tag v-if="task.dispatchModelVersion" size="small" effect="plain" type="success">
+                算法4 v{{ task.dispatchModelVersion }}
+              </el-tag>
+            </div>
+            <div
+              v-for="(item, idx) in task.dispatchPlan"
+              :key="idx"
+              class="dispatch-plan-item"
+            >
+              <div class="dp-header">
+                <el-tag size="small" :type="item.priority === 'HIGH' ? 'danger' : item.priority === 'MEDIUM' ? 'warning' : 'info'">
+                  {{ item.priority === 'HIGH' ? '高优先级' : item.priority === 'MEDIUM' ? '中优先级' : '普通' }}
+                </el-tag>
+                <span class="dp-type">{{ item.taskType }}</span>
+                <span class="dp-units">{{ item.units }}辆车</span>
+                <span class="dp-eta">预计 {{ item.etaMin }} 分钟到达</span>
+              </div>
+              <div class="dp-reasoning" v-if="item.reasoning">
+                <el-icon><InfoFilled /></el-icon>
+                <span>{{ item.reasoning }}</span>
+              </div>
+              <div class="dp-score" v-if="item.score !== '-'">
+                置信度: {{ item.score }}
+              </div>
+            </div>
+          </div>
+
           <!-- 状态更新 -->
           <div class="page-card">
             <h3 class="section-title">
@@ -423,6 +458,7 @@ import { ElMessage } from 'element-plus'
 import {
   ArrowLeft,
   CircleCheck,
+  InfoFilled,
   LocationFilled,
   Position,
   Tools,
@@ -904,6 +940,77 @@ onUnmounted(() => {
     color: $text-primary;
     font-size: 13px;
     line-height: 1.6;
+  }
+}
+
+/* ====== Algorithm4 Dispatch Plan ====== */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+
+  .section-title {
+    margin-bottom: 0;
+    padding-left: 12px;
+    border-left: 3px solid $accent;
+  }
+}
+
+.dispatch-plan-item {
+  background: #f8fafc;
+  border: 1px solid $border;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+
+  .dp-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+
+    .dp-type {
+      font-weight: 600;
+      color: $text-primary;
+    }
+
+    .dp-units {
+      color: $accent;
+      font-weight: 500;
+    }
+
+    .dp-eta {
+      color: $text-secondary;
+      font-size: 12px;
+    }
+  }
+
+  .dp-reasoning {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba($accent, 0.06);
+    border-radius: 6px;
+    font-size: 12px;
+    color: $text-secondary;
+    line-height: 1.5;
+
+    .el-icon {
+      flex-shrink: 0;
+      margin-top: 2px;
+      color: $accent;
+    }
+  }
+
+  .dp-score {
+    margin-top: 6px;
+    font-size: 11px;
+    color: $text-secondary;
+    text-align: right;
   }
 }
 

@@ -1,6 +1,7 @@
 package com.transfer.model;
 
 import com.transfer.enums.RiskLevel;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -52,6 +53,32 @@ public class PredictionResult extends AuditableEntity {
 
     @Column(length = 3000)
     private String rawResult;
+
+    @Column(length = 1200)
+    private String recoveryRecommendation;
+
+    private Double recoveryConfidence;
+
+    @Column(length = 32)
+    private String recoveryLevel;
+
+    @Column(length = 160)
+    private String recoveryModelVersion;
+
+    @Column(length = 80)
+    private String recoveryTraceId;
+
+    @Column(length = 1000)
+    private String recoveryKeyFactors;
+
+    @Column(length = 3000)
+    private String dispatchPlan;
+
+    @Column(length = 160)
+    private String dispatchModelVersion;
+
+    @Column(length = 80)
+    private String dispatchTraceId;
 
     public Long getIncidentId() {
         return incidentId;
@@ -172,5 +199,76 @@ public class PredictionResult extends AuditableEntity {
     public void setRawResult(String rawResult) {
         this.rawResult = rawResult;
     }
-}
 
+    public String getRecoveryRecommendation() {
+        return recoveryRecommendation;
+    }
+
+    public void setRecoveryRecommendation(String recoveryRecommendation) {
+        this.recoveryRecommendation = recoveryRecommendation;
+    }
+
+    public Double getRecoveryConfidence() {
+        return recoveryConfidence;
+    }
+
+    public void setRecoveryConfidence(Double recoveryConfidence) {
+        this.recoveryConfidence = recoveryConfidence;
+    }
+
+    public String getRecoveryLevel() {
+        return recoveryLevel;
+    }
+
+    public void setRecoveryLevel(String recoveryLevel) {
+        this.recoveryLevel = recoveryLevel;
+    }
+
+    public String getRecoveryModelVersion() {
+        return recoveryModelVersion;
+    }
+
+    public void setRecoveryModelVersion(String recoveryModelVersion) {
+        this.recoveryModelVersion = recoveryModelVersion;
+    }
+
+    public String getRecoveryTraceId() {
+        return recoveryTraceId;
+    }
+
+    public void setRecoveryTraceId(String recoveryTraceId) {
+        this.recoveryTraceId = recoveryTraceId;
+    }
+
+    public String getRecoveryKeyFactors() {
+        return recoveryKeyFactors;
+    }
+
+    public void setRecoveryKeyFactors(String recoveryKeyFactors) {
+        this.recoveryKeyFactors = recoveryKeyFactors;
+    }
+
+    public String getDispatchPlan() {
+        return dispatchPlan;
+    }
+
+    public void setDispatchPlan(String dispatchPlan) {
+        this.dispatchPlan = dispatchPlan;
+    }
+
+    public String getDispatchModelVersion() {
+        return dispatchModelVersion;
+    }
+
+    public void setDispatchModelVersion(String dispatchModelVersion) {
+        this.dispatchModelVersion = dispatchModelVersion;
+    }
+
+    public String getDispatchTraceId() {
+        return dispatchTraceId;
+    }
+
+    public void setDispatchTraceId(String dispatchTraceId) {
+        this.dispatchTraceId = dispatchTraceId;
+    }
+}

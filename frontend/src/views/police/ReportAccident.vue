@@ -554,8 +554,26 @@
             <el-descriptions-item label="风险等级">
               <RiskBadge :level="predictionResult.riskLevel" size="small" />
             </el-descriptions-item>
+            <el-descriptions-item label="风险评分">
+              {{ predictionResult.riskScore != null ? predictionResult.riskScore.toFixed(1) : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="置信度">
+              {{ predictionResult.confidence != null ? (predictionResult.confidence * 100).toFixed(1) + '%' : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="预计拥堵">
+              {{ predictionResult.congestionDurationMinutes != null ? predictionResult.congestionDurationMinutes + ' 分钟' : '-' }}
+            </el-descriptions-item>
             <el-descriptions-item label="预计恢复">
               {{ predictionResult.recoveryDurationMinutes != null ? predictionResult.recoveryDurationMinutes + ' 分钟' : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="predictionResult.recoveryRecommendation" label="算法3恢复推荐" :span="2">
+              {{ predictionResult.recoveryRecommendation }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="predictionResult.recoveryConfidence != null" label="恢复置信度">
+              {{ (predictionResult.recoveryConfidence * 100).toFixed(1) + '%' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="predictionResult.recoveryTraceId" label="算法3追踪">
+              {{ predictionResult.recoveryTraceId }}
             </el-descriptions-item>
             <el-descriptions-item label="处置建议" :span="2">
               {{ predictionResult.suggestions || '-' }}

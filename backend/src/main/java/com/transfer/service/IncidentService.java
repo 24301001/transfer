@@ -32,6 +32,8 @@ import com.transfer.adapter.YoloDetectClient;
 import com.transfer.common.BadRequestException;
 import com.transfer.common.ExternalServiceException;
 import com.transfer.common.ResourceNotFoundException;
+import com.transfer.dispatch.DispatchRecommendationClient;
+import com.transfer.dispatch.DispatchRecommendationResult;
 import com.transfer.dto.CitizenImmediateAdviceResponse;
 import com.transfer.dto.CreateIncidentRequest;
 import com.transfer.dto.IncidentArrivalEstimateResponse;
@@ -55,6 +57,8 @@ import com.transfer.prediction.PredictionModelClient;
 import com.transfer.prediction.PredictionModuleRequest;
 import com.transfer.prediction.PredictionModuleResponse;
 import com.transfer.prediction.RiskImpactResult;
+import com.transfer.recovery.RecoveryRecommendationClient;
+import com.transfer.recovery.RecoveryRecommendationResult;
 import com.transfer.repository.DispatchTaskRepository;
 import com.transfer.repository.IncidentAttachmentRepository;
 import com.transfer.repository.IncidentRepository;
@@ -74,6 +78,8 @@ public class IncidentService {
     private final DispatchTaskRepository dispatchTaskRepository;
     private final PredictionClient predictionClient;
     private final PredictionModelClient predictionModelClient;
+    private final RecoveryRecommendationClient recoveryRecommendationClient;
+    private final DispatchRecommendationClient dispatchRecommendationClient;
     private final DeepSeekClient deepSeekClient;
     private final FormalDispositionPlanService formalDispositionPlanService;
     private final ArrivalEstimateService arrivalEstimateService;
@@ -93,6 +99,8 @@ public class IncidentService {
             DispatchTaskRepository dispatchTaskRepository,
             PredictionClient predictionClient,
             PredictionModelClient predictionModelClient,
+            RecoveryRecommendationClient recoveryRecommendationClient,
+            DispatchRecommendationClient dispatchRecommendationClient,
             DeepSeekClient deepSeekClient,
             FormalDispositionPlanService formalDispositionPlanService,
             ArrivalEstimateService arrivalEstimateService,
@@ -112,6 +120,8 @@ public class IncidentService {
         this.dispatchTaskRepository = dispatchTaskRepository;
         this.predictionClient = predictionClient;
         this.predictionModelClient = predictionModelClient;
+        this.recoveryRecommendationClient = recoveryRecommendationClient;
+        this.dispatchRecommendationClient = dispatchRecommendationClient;
         this.deepSeekClient = deepSeekClient;
         this.formalDispositionPlanService = formalDispositionPlanService;
         this.arrivalEstimateService = arrivalEstimateService;
@@ -629,37 +639,6 @@ public class IncidentService {
     }
 
     /**
-     * 供事故提交后的后台监听器调用。
-     *
-     * <p>合并代码保留了监听器调用，但覆盖了这个公共服务入口。
-     * 这里仅恢复入口并复用原有 YOLO 检测主体，不改动事故上报主流程。</p>
-     */
-    @Transactional
-    public void runYoloDetectionByIncidentId(
-            Long incidentId
-    ) {
-        Incident incident = findIncident(incidentId);
-        List<IncidentAttachment> attachments =
-                attachmentRepository.findByIncidentId(incidentId);
-
-        if (attachments == null || attachments.isEmpty()) {
-            log.info(
-                    "事故 {} 没有可识别的附件",
-                    incident.getIncidentNo()
-            );
-            return;
-        }
-
-        runYoloDetection(
-                incident,
-                attachments,
-                null,
-                null,
-                null
-        );
-    }
-
-    /**
      * 对上传的照片/视频调用 YOLOv5 进行事故检测，
      * 自动提取事故类型（排除 "car"），保存到附件和事故记录。
      */
@@ -983,37 +962,50 @@ public class IncidentService {
         Incident incident =
                 findIncident(incidentId);
 
+        List<IncidentAttachment> attachments =
+                attachmentRepository
+                        .findByIncidentIdOrderByCreatedAtAsc(
+                                incidentId
+                        );
+
+        PredictionModuleResultRequest enhancedRequest =
+                applyRecoveryRecommendation(
+                        incident,
+                        attachments,
+                        request
+                );
+
         String riskFactors =
                 joinRiskFactors(
-                        request.riskFactors()
+                        enhancedRequest.riskFactors()
                 );
 
         String suggestions =
                 formalDispositionPlanService.buildFormalPlan(
                         incident,
-                        request,
+                        enhancedRequest,
                         riskFactors
                 );
 
         PredictionOutcome outcome =
                 new PredictionOutcome(
-                        request.accidentType(),
-                        request.riskLevel(),
-                        request.congestionDurationMinutes(),
-                        request.recoveryDurationMinutes(),
-                        request.confidence(),
+                        enhancedRequest.accidentType(),
+                        enhancedRequest.riskLevel(),
+                        enhancedRequest.congestionDurationMinutes(),
+                        enhancedRequest.recoveryDurationMinutes(),
+                        enhancedRequest.confidence(),
                         firstNonBlank(
-                                request.modelVersion(),
+                                enhancedRequest.modelVersion(),
                                 "data-module"
                         ),
                         suggestions,
-                        request.riskFactors(),
-                        request.evidenceSummary()
+                        enhancedRequest.riskFactors(),
+                        enhancedRequest.evidenceSummary()
                 );
 
         String explanation =
                 firstNonBlank(
-                        request.explanation(),
+                        enhancedRequest.explanation(),
                         deepSeekClient.explain(
                                 outcome,
                                 incident.getLocationName(),
@@ -1029,33 +1021,33 @@ public class IncidentService {
         );
 
         result.setAccidentType(
-                request.accidentType().trim()
+                enhancedRequest.accidentType().trim()
         );
 
         result.setRiskLevel(
-                request.riskLevel()
+                enhancedRequest.riskLevel()
         );
 
         result.setRiskScore(
-                request.riskScore()
+                enhancedRequest.riskScore()
         );
 
         result.setImageEvidence(
                 joinImageEvidence(
-                        request.imageEvidence()
+                        enhancedRequest.imageEvidence()
                 )
         );
 
         result.setCongestionDurationMinutes(
-                request.congestionDurationMinutes()
+                enhancedRequest.congestionDurationMinutes()
         );
 
         result.setRecoveryDurationMinutes(
-                request.recoveryDurationMinutes()
+                enhancedRequest.recoveryDurationMinutes()
         );
 
         result.setConfidence(
-                request.confidence()
+                enhancedRequest.confidence()
         );
 
         result.setModelVersion(
@@ -1075,19 +1067,72 @@ public class IncidentService {
         );
 
         result.setEvidenceSummary(
-                trimToNull(request.evidenceSummary())
+                trimToNull(enhancedRequest.evidenceSummary())
         );
 
         result.setDataModuleTraceId(
-                trimToNull(request.dataModuleTraceId())
+                trimToNull(enhancedRequest.dataModuleTraceId())
         );
 
         result.setRawResult(
-                request.rawResult()
+                enhancedRequest.rawResult()
+        );
+
+        result.setRecoveryRecommendation(
+                trimToNull(enhancedRequest.recoveryRecommendation())
+        );
+
+        result.setRecoveryConfidence(
+                enhancedRequest.recoveryConfidence()
+        );
+
+        result.setRecoveryLevel(
+                trimToNull(enhancedRequest.recoveryLevel())
+        );
+
+        result.setRecoveryModelVersion(
+                trimToNull(enhancedRequest.recoveryModelVersion())
+        );
+
+        result.setRecoveryTraceId(
+                trimToNull(enhancedRequest.recoveryTraceId())
+        );
+
+        result.setRecoveryKeyFactors(
+                joinRiskFactors(
+                        enhancedRequest.recoveryKeyFactors()
+                )
         );
 
         PredictionResult saved =
                 predictionResultRepository.save(result);
+
+        // Algorithm4: RL调度推荐
+        try {
+            if (dispatchRecommendationClient != null
+                    && dispatchRecommendationClient.isConfigured()) {
+                var dispatchResult = dispatchRecommendationClient
+                        .recommend(incident, attachments, enhancedRequest);
+                if (dispatchResult.isPresent()) {
+                    var dispatch = dispatchResult.get();
+                    String json = toDispatchPlanJson(dispatch);
+                    log.info("Algorithm4 dispatch: incidentId={}, plan={}, model={}",
+                            incident.getId(),
+                            json != null ? json.substring(0, Math.min(80, json.length())) : "null",
+                            dispatch.modelVersion());
+                    saved.setDispatchPlan(json);
+                    saved.setDispatchModelVersion(dispatch.modelVersion());
+                    saved.setDispatchTraceId(dispatch.traceId());
+                    saved.setModelVersion(joinVersions(saved.getModelVersion(), dispatch.modelVersion()));
+                    predictionResultRepository.save(saved);
+                } else {
+                    log.info("Algorithm4 dispatch: incidentId={}, no recommendation", incident.getId());
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Algorithm4 dispatch failed: incidentId={}, error={}",
+                    incident.getId(), ex.getMessage());
+        }
 
         updateIncidentFromPrediction(
                 incident,
@@ -1636,7 +1681,9 @@ public PredictionDisplayResponse regenerateLatestPredictionExplanation(
                         : riskImpactResult.suggestion(),
                 riskImpactResult == null
                         ? null
-                        : riskImpactResult.explanation()
+                        : riskImpactResult.explanation(),
+                null, null, null, null, null, null,
+                null, null, null
         );
     }
 
@@ -1991,6 +2038,165 @@ public PredictionDisplayResponse regenerateLatestPredictionExplanation(
     /**
      * 校验数据模块返回的预测结果。
      */
+    private PredictionModuleResultRequest applyRecoveryRecommendation(
+            Incident incident,
+            List<IncidentAttachment> attachments,
+            PredictionModuleResultRequest request
+    ) {
+        if (recoveryRecommendationClient == null
+                || !recoveryRecommendationClient.isConfigured()) {
+            return request;
+        }
+
+        return recoveryRecommendationClient
+                .recommend(
+                        incident,
+                        attachments,
+                        request
+                )
+                .map(recovery -> mergeRecoveryRecommendation(
+                        request,
+                        recovery
+                ))
+                .orElse(request);
+    }
+
+    private PredictionModuleResultRequest mergeRecoveryRecommendation(
+            PredictionModuleResultRequest request,
+            RecoveryRecommendationResult recovery
+    ) {
+        Integer predictedRecovery =
+                recovery.predictedRecoveryDurationMinutes();
+
+        Integer recoveryDurationMinutes =
+                predictedRecovery == null
+                        ? request.recoveryDurationMinutes()
+                        : Math.max(
+                        predictedRecovery,
+                        request.congestionDurationMinutes() + 5
+                );
+
+        List<String> riskFactors =
+                mergeFactors(
+                        request.riskFactors(),
+                        recovery.keyFactors()
+                );
+
+        return new PredictionModuleResultRequest(
+                request.accidentType(),
+                request.riskLevel(),
+                request.riskScore(),
+                request.congestionDurationMinutes(),
+                recoveryDurationMinutes,
+                request.confidence(),
+                joinVersions(
+                        request.modelVersion(),
+                        recovery.modelVersion()
+                ),
+                riskFactors,
+                request.imageEvidence(),
+                request.evidenceSummary(),
+                request.dataModuleTraceId(),
+                request.rawResult(),
+                request.suggestion(),
+                request.explanation(),
+                recovery.recommendation(),
+                recovery.confidence(),
+                recovery.recoveryLevel(),
+                recovery.modelVersion(),
+                recovery.traceId(),
+                recovery.keyFactors(),
+                request.dispatchPlan(),
+                request.dispatchModelVersion(),
+                request.dispatchTraceId()
+        );
+    }
+
+    private List<String> mergeFactors(
+            List<String> primary,
+            List<String> secondary
+    ) {
+        List<String> merged =
+                new ArrayList<>();
+
+        addFactors(merged, primary);
+        addFactors(merged, secondary);
+
+        return merged.isEmpty()
+                ? null
+                : merged;
+    }
+
+    private void addFactors(
+            List<String> target,
+            List<String> values
+    ) {
+        if (values == null) {
+            return;
+        }
+
+        for (String value : values) {
+            if (value != null
+                    && !value.isBlank()
+                    && !target.contains(value.trim())) {
+                target.add(value.trim());
+            }
+        }
+    }
+
+    // ──────────── Algorithm4 Dispatch Recommendation ────────────
+
+    private PredictionModuleResultRequest applyDispatchRecommendation(
+            Incident incident,
+            List<IncidentAttachment> attachments,
+            PredictionModuleResultRequest request
+    ) {
+        if (dispatchRecommendationClient == null
+                || !dispatchRecommendationClient.isConfigured()) {
+            return request;
+        }
+
+        return dispatchRecommendationClient
+                .recommend(incident, attachments, request)
+                .map(dispatch -> {
+                    // Store dispatch plan as JSON for later saving
+                    String json = toDispatchPlanJson(dispatch);
+                    return new PredictionModuleResultRequest(
+                            request.accidentType(), request.riskLevel(),
+                            request.riskScore(), request.congestionDurationMinutes(),
+                            request.recoveryDurationMinutes(), request.confidence(),
+                            joinVersions(request.modelVersion(), dispatch.modelVersion()),
+                            request.riskFactors(), request.imageEvidence(),
+                            request.evidenceSummary(), request.dataModuleTraceId(),
+                            request.rawResult(), request.suggestion(), request.explanation(),
+                            request.recoveryRecommendation(), request.recoveryConfidence(),
+                            request.recoveryLevel(), request.recoveryModelVersion(),
+                            request.recoveryTraceId(), request.recoveryKeyFactors(),
+                            json, dispatch.modelVersion(), dispatch.traceId()
+                    );
+                })
+                .orElse(request);
+    }
+
+    private String toDispatchPlanJson(DispatchRecommendationResult dispatch) {
+        if (dispatch.dispatchPlan() == null || dispatch.dispatchPlan().isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < dispatch.dispatchPlan().size(); i++) {
+            var item = dispatch.dispatchPlan().get(i);
+            if (i > 0) sb.append(",");
+            sb.append(String.format(
+                "{\"taskType\":\"%s\",\"priority\":\"%s\",\"units\":%d,\"etaMin\":%d,\"reasoning\":\"%s\",\"score\":%.4f}",
+                item.taskType(), item.priority(), item.recommendedUnits(),
+                item.estimatedArrivalMinutes(),
+                item.reasoning().replace("\"", "'"), item.score()
+            ));
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     private void validatePredictionResult(
             PredictionModuleResultRequest request
     ) {
@@ -2144,5 +2350,32 @@ public PredictionDisplayResponse regenerateLatestPredictionExplanation(
         return result.isBlank()
                 ? null
                 : result;
+    }
+
+    /**
+     * 供事故提交后的后台监听器调用，对已保存的附件执行 YOLOv5 检测。
+     * 复用已有的 {@link #runYoloDetection} 私有方法。
+     */
+    @Transactional
+    public void runYoloDetectionByIncidentId(Long incidentId) {
+        Incident incident = findIncident(incidentId);
+        List<IncidentAttachment> attachments =
+                attachmentRepository.findByIncidentId(incidentId);
+
+        if (attachments == null || attachments.isEmpty()) {
+            log.info(
+                    "事故 {} 没有可识别的附件，跳过 YOLO 检测",
+                    incident.getIncidentNo()
+            );
+            return;
+        }
+
+        runYoloDetection(
+                incident,
+                attachments,
+                null,
+                null,
+                null
+        );
     }
 }

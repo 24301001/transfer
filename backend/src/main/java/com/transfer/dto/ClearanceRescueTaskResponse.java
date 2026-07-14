@@ -1,13 +1,14 @@
 package com.transfer.dto;
 
+import java.time.LocalDateTime;
+
 import com.transfer.enums.CoordinateType;
 import com.transfer.enums.RiskLevel;
 import com.transfer.enums.TaskStatus;
 import com.transfer.enums.TaskType;
 import com.transfer.model.DispatchTask;
 import com.transfer.model.Incident;
-
-import java.time.LocalDateTime;
+import com.transfer.model.PredictionResult;
 
 public record ClearanceRescueTaskResponse(
         Long taskId,
@@ -56,6 +57,15 @@ public record ClearanceRescueTaskResponse(
         String taskAdvice,
         String feedback,
 
+        // ---- Algorithm4 dispatch recommendation ----
+        String dispatchPlan,
+        String dispatchModelVersion,
+        String dispatchTraceId,
+        // ---- Algorithm3 recovery recommendation ----
+        String recoveryRecommendation,
+        Double recoveryConfidence,
+        String recoveryLevel,
+
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -65,6 +75,16 @@ public record ClearanceRescueTaskResponse(
             Incident incident,
             MapLocationResponse map,
             String confirmedClearanceAdvice
+    ) {
+        return from(task, incident, map, confirmedClearanceAdvice, null);
+    }
+
+    public static ClearanceRescueTaskResponse from(
+            DispatchTask task,
+            Incident incident,
+            MapLocationResponse map,
+            String confirmedClearanceAdvice,
+            PredictionResult prediction
     ) {
         return new ClearanceRescueTaskResponse(
                 task.getId(),
@@ -116,6 +136,13 @@ public record ClearanceRescueTaskResponse(
                 confirmedClearanceAdvice,
                 task.getAdvice(),
                 task.getFeedback(),
+
+                prediction != null ? prediction.getDispatchPlan() : null,
+                prediction != null ? prediction.getDispatchModelVersion() : null,
+                prediction != null ? prediction.getDispatchTraceId() : null,
+                prediction != null ? prediction.getRecoveryRecommendation() : null,
+                prediction != null ? prediction.getRecoveryConfidence() : null,
+                prediction != null ? prediction.getRecoveryLevel() : null,
 
                 task.getCreatedAt(),
                 task.getUpdatedAt()

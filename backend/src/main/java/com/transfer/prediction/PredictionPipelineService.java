@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.List;
@@ -77,11 +78,7 @@ public class PredictionPipelineService {
      * @param operatorUserId 操作用户 ID
      * @return 持久化后的 PredictionResult，预测模块不可用时返回 null
      */
-    /*
-     * 不在整个方法上开启事务：外部预测调用可能持续约 1 分钟，
-     * 长事务会长期占用数据库连接。最终结果写入仍由
-     * IncidentService.acceptPredictionResult() 的短事务完成。
-     */
+    @Transactional
     public PredictionResult execute(Long incidentId, Long operatorUserId) {
         if (incidentId == null) {
             log.warn("预测流水线收到 null incidentId，跳过");
@@ -295,7 +292,9 @@ public class PredictionPipelineService {
                 response.traceId(),
                 null,  // rawResult — 完整 JSON 可能过大，按需存储
                 suggestion,
-                explanation
+                explanation,
+                null, null, null, null, null, null,
+                null, null, null
         );
     }
 

@@ -215,6 +215,17 @@ CREATE TABLE `prediction_results` (
 
   `raw_result` VARCHAR(3000) NULL,
 
+  `recovery_recommendation` VARCHAR(1200) NULL,
+  `recovery_confidence` DOUBLE NULL,
+  `recovery_level` VARCHAR(32) NULL,
+  `recovery_model_version` VARCHAR(160) NULL,
+  `recovery_trace_id` VARCHAR(80) NULL,
+  `recovery_key_factors` VARCHAR(1000) NULL,
+
+  `dispatch_plan` VARCHAR(3000) NULL,
+  `dispatch_model_version` VARCHAR(160) NULL,
+  `dispatch_trace_id` VARCHAR(80) NULL,
+
   `created_at` DATETIME(6) NULL,
   `updated_at` DATETIME(6) NULL,
 

@@ -1,70 +1,42 @@
 package com.transfer.service;
 
-import com.transfer.common.BadRequestException;
-
-import com.transfer.common.ResourceNotFoundException;
-
-import com.transfer.dto.ClearanceRescueTaskResponse;
-
-import com.transfer.dto.CommandDispatchRequest;
-
-import com.transfer.dto.CreateDispatchTaskRequest;
-
-import com.transfer.dto.DispatchAssignmentRequest;
-
-import com.transfer.dto.MapLocationResponse;
-
-import com.transfer.dto.MapPointResponse;
-
-import com.transfer.dto.UpdateTaskStatusRequest;
-
-import com.transfer.enums.CoordinateType;
-
-import com.transfer.enums.IncidentStatus;
-
-import com.transfer.enums.NotificationChannel;
-
-import com.transfer.enums.TaskStatus;
-
-import com.transfer.enums.TaskType;
-
-import com.transfer.enums.UserStatus;
-
-import com.transfer.enums.VehicleStatus;
-
-import com.transfer.model.DispatchTask;
-
-import com.transfer.model.EmergencyVehicle;
-
-import com.transfer.model.Incident;
-
-import com.transfer.model.UserAccount;
-
-import com.transfer.repository.DispatchTaskRepository;
-
-import com.transfer.repository.EmergencyVehicleRepository;
-
-import com.transfer.repository.UserAccountRepository;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.data.domain.Page;
-
 import org.springframework.data.domain.Pageable;
-
 import org.springframework.stereotype.Service;
-
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-
-import java.time.format.DateTimeFormatter;
-
-import java.util.ArrayList;
-
-import java.util.List;
-
-import java.util.Map;
-
-import java.util.UUID;
+import com.transfer.common.BadRequestException;
+import com.transfer.common.ResourceNotFoundException;
+import com.transfer.dto.ClearanceRescueTaskResponse;
+import com.transfer.dto.CommandDispatchRequest;
+import com.transfer.dto.CreateDispatchTaskRequest;
+import com.transfer.dto.DispatchAssignmentRequest;
+import com.transfer.dto.MapLocationResponse;
+import com.transfer.dto.MapPointResponse;
+import com.transfer.dto.UpdateTaskStatusRequest;
+import com.transfer.enums.CoordinateType;
+import com.transfer.enums.IncidentStatus;
+import com.transfer.enums.NotificationChannel;
+import com.transfer.enums.TaskStatus;
+import com.transfer.enums.TaskType;
+import com.transfer.enums.UserStatus;
+import com.transfer.enums.VehicleStatus;
+import com.transfer.model.DispatchTask;
+import com.transfer.model.EmergencyVehicle;
+import com.transfer.model.Incident;
+import com.transfer.model.PredictionResult;
+import com.transfer.model.UserAccount;
+import com.transfer.repository.DispatchTaskRepository;
+import com.transfer.repository.EmergencyVehicleRepository;
+import com.transfer.repository.PredictionResultRepository;
+import com.transfer.repository.UserAccountRepository;
 
 @Service
 public class DispatchTaskService {
@@ -115,6 +87,9 @@ public class DispatchTaskService {
     private final RealtimeService
             realtimeService;
 
+    private final PredictionResultRepository
+            predictionResultRepository;
+
 
     public DispatchTaskService(
 
@@ -140,7 +115,10 @@ public class DispatchTaskService {
                     operationLogService,
 
             RealtimeService
-                    realtimeService
+                    realtimeService,
+
+            PredictionResultRepository
+                    predictionResultRepository
 
     ) {
 
@@ -182,6 +160,10 @@ public class DispatchTaskService {
         this.realtimeService =
 
                 realtimeService;
+
+        this.predictionResultRepository =
+
+                predictionResultRepository;
     }
 
 
@@ -1194,6 +1176,14 @@ public class DispatchTaskService {
                 );
 
 
+        // ---- Fetch Algorithm3/4 prediction result ----
+        PredictionResult prediction =
+                predictionResultRepository
+                        .findFirstByIncidentIdOrderByCreatedAtDesc(
+                                task.getIncidentId()
+                        )
+                        .orElse(null);
+
         return ClearanceRescueTaskResponse
 
                 .from(
@@ -1204,7 +1194,8 @@ public class DispatchTaskService {
 
                         mapWithDrivingNavigation,
 
-                        null
+                        null,
+                        prediction
                 );
     }
 

@@ -140,6 +140,12 @@
               <el-descriptions-item label="道路恢复时间">
                 <span class="predict-value">{{ accident.recoveryTime }}</span>
               </el-descriptions-item>
+              <el-descriptions-item v-if="accident.recoveryLevel" label="算法3恢复等级">
+                <el-tag size="small" type="info">{{ accident.recoveryLevel }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item v-if="accident.recoveryConfidence != null" label="算法3置信度">
+                <span class="predict-value">{{ (accident.recoveryConfidence * 100).toFixed(1) }}%</span>
+              </el-descriptions-item>
               <el-descriptions-item label="是否需要支援">
                 <el-tag v-if="accident.needSupport?.length" type="danger" size="small">
                   {{ accident.needSupport.join('、') }}
@@ -226,6 +232,35 @@
             {{ accident.evidenceSummary }}
           </el-descriptions-item>
         </el-descriptions>
+      </div>
+
+      <!-- 算法3道路恢复推荐 -->
+      <div class="page-card" style="margin-top:16px;" v-if="accident.recoveryRecommendation">
+        <div class="section-header">
+          <h3 class="section-title">算法3道路恢复推荐</h3>
+          <el-tag v-if="accident.recoveryModelVersion" size="small" effect="plain">
+            {{ accident.recoveryModelVersion }}
+          </el-tag>
+        </div>
+        <el-alert
+          :title="accident.recoveryRecommendation"
+          type="success"
+          :closable="false"
+          show-icon
+          class="advice-alert"
+        />
+        <div v-if="accident.recoveryKeyFactors" class="factor-tags" style="margin-top:12px;">
+          <el-tag
+            v-for="factor in splitRiskFactors(accident.recoveryKeyFactors)"
+            :key="factor"
+            size="small"
+            type="success"
+            effect="plain"
+          >
+            {{ factor }}
+          </el-tag>
+        </div>
+        <code v-if="accident.recoveryTraceId" class="trace-code">{{ accident.recoveryTraceId }}</code>
       </div>
 
       <!-- AI 解释 -->

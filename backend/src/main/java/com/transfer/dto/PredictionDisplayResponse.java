@@ -1,10 +1,10 @@
 package com.transfer.dto;
 
+import java.time.LocalDateTime;
+
 import com.transfer.enums.RiskLevel;
 import com.transfer.model.Incident;
 import com.transfer.model.PredictionResult;
-
-import java.time.LocalDateTime;
 
 public record PredictionDisplayResponse(
         Long incidentId,
@@ -29,6 +29,12 @@ public record PredictionDisplayResponse(
         String imageEvidence,
         String evidenceSummary,
         String dataModuleTraceId,
+        String recoveryRecommendation,
+        Double recoveryConfidence,
+        String recoveryLevel,
+        String recoveryModelVersion,
+        String recoveryTraceId,
+        String recoveryKeyFactors,
         LocalDateTime generatedAt
 ) {
     public static PredictionDisplayResponse from(Incident incident, PredictionResult result) {
@@ -55,6 +61,12 @@ public record PredictionDisplayResponse(
                 result.getImageEvidence(),
                 result.getEvidenceSummary(),
                 result.getDataModuleTraceId(),
+                result.getRecoveryRecommendation(),
+                result.getRecoveryConfidence(),
+                result.getRecoveryLevel(),
+                result.getRecoveryModelVersion(),
+                result.getRecoveryTraceId(),
+                result.getRecoveryKeyFactors(),
                 result.getCreatedAt()
         );
     }

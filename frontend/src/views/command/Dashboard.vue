@@ -319,9 +319,11 @@
               <span v-if="!(drawerDetail || selectedAccident).sceneLabels?.length" class="text-muted">-</span>
             </div>
           </el-descriptions-item>
+          <el-descriptions-item label="事故类型">{{ selectedAccident.type }}</el-descriptions-item>
           <el-descriptions-item label="风险等级">
             <RiskBadge :level="selectedAccident.riskLevel" size="small" />
           </el-descriptions-item>
+          <el-descriptions-item label="风险评分">{{ selectedAccident.riskScore }}</el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="statusType(selectedAccident.status)" size="small" effect="plain">
               {{ selectedAccident.status }}
@@ -329,6 +331,7 @@
           </el-descriptions-item>
           <el-descriptions-item label="地点">{{ selectedAccident.location?.name }}</el-descriptions-item>
           <el-descriptions-item label="上报时间">{{ selectedAccident.reportTime }}</el-descriptions-item>
+          <el-descriptions-item label="预计拥堵">{{ selectedAccident.congestionDuration }}</el-descriptions-item>
           <el-descriptions-item label="是否有人受伤">
             <el-tag :type="(drawerDetail || selectedAccident).injuryReported ? 'danger' : 'success'" size="small">
               {{ (drawerDetail || selectedAccident).injuryReported ? '是' : '否' }}
@@ -350,6 +353,47 @@
             <span v-else class="text-muted">暂无建议</span>
           </el-descriptions-item>
         </el-descriptions>
+
+        <div class="drawer-algorithm-panel">
+          <div class="drawer-algorithm-head">
+            <h4>算法2风险评估</h4>
+            <el-tag v-if="(drawerDetail || selectedAccident).modelVersion" size="small" effect="plain">
+              {{ (drawerDetail || selectedAccident).modelVersion }}
+            </el-tag>
+          </div>
+          <div class="drawer-algorithm-grid">
+            <div>
+              <span>风险评分</span>
+              <strong>{{ formatRiskScore((drawerDetail || selectedAccident).riskScore) }}</strong>
+            </div>
+            <div>
+              <span>人流量</span>
+              <strong>{{ (drawerDetail || selectedAccident).peopleFlow || '-' }}</strong>
+            </div>
+            <div>
+              <span>路面状况</span>
+              <strong>{{ (drawerDetail || selectedAccident).roadStatus || '-' }}</strong>
+            </div>
+            <div>
+              <span>追踪编号</span>
+              <code>{{ (drawerDetail || selectedAccident).dataModuleTraceId || '-' }}</code>
+            </div>
+          </div>
+          <div v-if="(drawerDetail || selectedAccident).riskFactors" class="drawer-factor-tags">
+            <el-tag
+              v-for="factor in splitRiskFactors((drawerDetail || selectedAccident).riskFactors)"
+              :key="factor"
+              size="small"
+              type="warning"
+              effect="plain"
+            >
+              {{ factor }}
+            </el-tag>
+          </div>
+          <p v-if="(drawerDetail || selectedAccident).evidenceSummary" class="drawer-evidence">
+            {{ (drawerDetail || selectedAccident).evidenceSummary }}
+          </p>
+        </div>
 
         <!-- 事故描述（列表数据已有） -->
         <div v-if="selectedAccident.description" class="drawer-section">
@@ -427,15 +471,59 @@
               <span v-if="!drawerAccident.sceneLabels?.length" class="text-muted">-</span>
             </div>
           </el-descriptions-item>
+          <el-descriptions-item label="事故类型">{{ drawerAccident.type }}</el-descriptions-item>
+          <el-descriptions-item label="风险评分">{{ drawerAccident.riskScore }}</el-descriptions-item>
           <el-descriptions-item label="处理状态">
             <span class="status-chip" :class="statusClass(drawerAccident.status)">{{ drawerAccident.status }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="事故地点">{{ drawerAccident.location?.name || '-' }}</el-descriptions-item>
           <el-descriptions-item label="上报时间">{{ drawerAccident.reportTime }}</el-descriptions-item>
+          <el-descriptions-item label="预计拥堵">{{ drawerAccident.congestionDuration }}</el-descriptions-item>
           <el-descriptions-item label="恢复时间">{{ drawerAccident.recoveryTime }}</el-descriptions-item>
           <el-descriptions-item label="影响车道">{{ drawerAccident.affectedLanes }}</el-descriptions-item>
           <el-descriptions-item label="天气 / 道路">{{ drawerAccident.weather }} / {{ drawerAccident.roadLevel }}</el-descriptions-item>
         </el-descriptions>
+
+        <div class="drawer-algorithm-panel">
+          <div class="drawer-algorithm-head">
+            <h4>算法2风险评估</h4>
+            <el-tag v-if="drawerAccident.modelVersion" size="small" effect="plain">
+              {{ drawerAccident.modelVersion }}
+            </el-tag>
+          </div>
+          <div class="drawer-algorithm-grid">
+            <div>
+              <span>风险评分</span>
+              <strong>{{ formatRiskScore(drawerAccident.riskScore) }}</strong>
+            </div>
+            <div>
+              <span>人流量</span>
+              <strong>{{ drawerAccident.peopleFlow || '-' }}</strong>
+            </div>
+            <div>
+              <span>路面状况</span>
+              <strong>{{ drawerAccident.roadStatus || '-' }}</strong>
+            </div>
+            <div>
+              <span>追踪编号</span>
+              <code>{{ drawerAccident.dataModuleTraceId || '-' }}</code>
+            </div>
+          </div>
+          <div v-if="drawerAccident.riskFactors" class="drawer-factor-tags">
+            <el-tag
+              v-for="factor in splitRiskFactors(drawerAccident.riskFactors)"
+              :key="factor"
+              size="small"
+              type="warning"
+              effect="plain"
+            >
+              {{ factor }}
+            </el-tag>
+          </div>
+          <p v-if="drawerAccident.evidenceSummary" class="drawer-evidence">
+            {{ drawerAccident.evidenceSummary }}
+          </p>
+        </div>
 
         <div v-if="drawerAccident.description" class="drawer-section">
           <h4>事故描述</h4>

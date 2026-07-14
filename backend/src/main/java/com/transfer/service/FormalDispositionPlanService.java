@@ -55,6 +55,13 @@ public class FormalDispositionPlanService {
                     .append(" ");
         }
 
+        if (request.recoveryRecommendation() != null
+                && !request.recoveryRecommendation().isBlank()) {
+            builder.append("Algorithm3道路恢复推荐：")
+                    .append(request.recoveryRecommendation().trim())
+                    .append(" ");
+        }
+
         return limit(builder.toString(), 980);
     }
 

@@ -161,6 +161,36 @@ function transformTask(task = {}) {
 
     estimatedArrivalMinutes:
       task.estimatedArrivalMinutes ?? null,
+
+    // ---- Algorithm4 dispatch recommendation ----
+    dispatchPlan: parseDispatchPlan(task.dispatchPlan) || [],
+    dispatchModelVersion: task.dispatchModelVersion || '',
+    dispatchTraceId: task.dispatchTraceId || '',
+    // ---- Algorithm3 recovery recommendation ----
+    recoveryRecommendation: task.recoveryRecommendation || '',
+    recoveryConfidence: task.recoveryConfidence ?? null,
+    recoveryLevel: task.recoveryLevel || '',
+  }
+}
+
+/**
+ * Parse Algorithm4 dispatchPlan JSON string into displayable array.
+ */
+function parseDispatchPlan(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  try {
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return null
+    return arr.map(item => ({
+      taskType: item.taskType || '',
+      priority: item.priority || '',
+      units: item.recommendedUnits ?? item.units ?? 1,
+      etaMin: item.estimatedArrivalMinutes ?? item.etaMin ?? 0,
+      reasoning: item.reasoning || '',
+      score: item.score != null ? (item.score * 100).toFixed(0) + '%' : '-',
+    }))
+  } catch {
+    return null
   }
 }
 

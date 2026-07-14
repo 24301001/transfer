@@ -270,7 +270,7 @@ const componentList = computed(() => {
   if (!comps) return []
   const displayNames = {
     database: '数据库', redis: 'Redis',
-    predictionModule: '事故预测', yoloService: 'YOLO 识别',
+    predictionModule: '事故预测', recoveryModule: '算法3恢复推荐', yoloService: 'YOLO 识别',
     siliconFlowAi: '硅基流动 AI', baiduMap: '百度地图', mail: '邮件服务',
   }
   return Object.entries(comps).map(([key, c]) => ({

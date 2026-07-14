@@ -6,6 +6,7 @@ import com.transfer.enums.TaskStatus;
 import com.transfer.enums.UserStatus;
 import com.transfer.enums.VehicleStatus;
 import com.transfer.prediction.PredictionModelClient;
+import com.transfer.recovery.RecoveryRecommendationClient;
 import com.transfer.repository.DispatchTaskRepository;
 import com.transfer.repository.EmergencyVehicleRepository;
 import com.transfer.repository.IncidentRepository;
@@ -51,6 +52,7 @@ public class SystemHealthService {
     private final DataSource dataSource;
     private final StringRedisTemplate redisTemplate;
     private final PredictionModelClient predictionModelClient;
+    private final RecoveryRecommendationClient recoveryRecommendationClient;
     private final IncidentRepository incidentRepository;
     private final UserAccountRepository userAccountRepository;
     private final DispatchTaskRepository dispatchTaskRepository;
@@ -78,6 +80,7 @@ public class SystemHealthService {
             DataSource dataSource,
             StringRedisTemplate redisTemplate,
             PredictionModelClient predictionModelClient,
+            RecoveryRecommendationClient recoveryRecommendationClient,
             IncidentRepository incidentRepository,
             UserAccountRepository userAccountRepository,
             DispatchTaskRepository dispatchTaskRepository,
@@ -101,6 +104,7 @@ public class SystemHealthService {
         this.dataSource = dataSource;
         this.redisTemplate = redisTemplate;
         this.predictionModelClient = predictionModelClient;
+        this.recoveryRecommendationClient = recoveryRecommendationClient;
         this.incidentRepository = incidentRepository;
         this.userAccountRepository = userAccountRepository;
         this.dispatchTaskRepository = dispatchTaskRepository;
@@ -136,6 +140,8 @@ public class SystemHealthService {
 
         AdminHealthResponse.ComponentHealth prediction = checkPredictionModule();
         components.put("predictionModule", prediction);
+        AdminHealthResponse.ComponentHealth recovery = checkRecoveryModule();
+        components.put("recoveryModule", recovery);
         addDependencyWarning(warnings, "事故预测模块", prediction, false);
 
         AdminHealthResponse.ComponentHealth yolo = checkYoloService();
@@ -164,7 +170,7 @@ public class SystemHealthService {
 
         AdminHealthResponse.BusinessMetrics businessMetrics = collectBusinessMetrics(warnings);
 
-        String overallStatus = resolveOverallStatus(database, redis, prediction, yolo, resources);
+        String overallStatus = resolveOverallStatus(database, redis, prediction, recovery, yolo, resources);
         String statusMessage = switch (overallStatus) {
             case UP -> "系统运行正常";
             case DEGRADED -> "系统可用，但存在需要关注的异常";
@@ -250,6 +256,32 @@ public class SystemHealthService {
         } catch (Exception ex) {
             return component(DOWN, true, elapsedMillis(startedAt),
                     conciseMessage(ex), Map.of());
+        }
+    }
+
+    private AdminHealthResponse.ComponentHealth checkRecoveryModule() {
+        if (!recoveryRecommendationClient.isConfigured()) {
+            return component(NOT_CONFIGURED, false, null,
+                    "Algorithm3 recovery service is not configured", Map.of());
+        }
+
+        long startedAt = System.nanoTime();
+        try {
+            boolean healthy =
+                    recoveryRecommendationClient.healthCheck();
+
+            return component(
+                    healthy ? UP : DOWN,
+                    true,
+                    elapsedMillis(startedAt),
+                    healthy
+                            ? "Algorithm3 recovery service is healthy"
+                            : "Algorithm3 recovery service is unavailable",
+                    Map.of("port", 8003)
+            );
+        } catch (Exception ex) {
+            return component(DOWN, true, elapsedMillis(startedAt),
+                    conciseMessage(ex), Map.of("port", 8003));
         }
     }
 
@@ -422,6 +454,7 @@ public class SystemHealthService {
             AdminHealthResponse.ComponentHealth database,
             AdminHealthResponse.ComponentHealth redis,
             AdminHealthResponse.ComponentHealth prediction,
+            AdminHealthResponse.ComponentHealth recovery,
             AdminHealthResponse.ComponentHealth yolo,
             AdminHealthResponse.ResourceUsage resources
     ) {
@@ -430,6 +463,7 @@ public class SystemHealthService {
         }
         if (DOWN.equals(redis.status())
                 || DOWN.equals(prediction.status())
+                || DOWN.equals(recovery.status())
                 || DOWN.equals(yolo.status())
                 || resources.heapUsagePercent() >= 85.0
                 || resources.diskUsagePercent() >= 90.0
