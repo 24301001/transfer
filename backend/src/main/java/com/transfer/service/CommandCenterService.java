@@ -690,13 +690,22 @@ public class CommandCenterService {
 
     /**
      * 获取事故的 AI 检测附件列表（供指挥中心查看带检测框的图片/视频）。
+     * 返回满足以下条件之一的附件（确保前端有数据可看）：
+     * 1. recognitionStatus = COMPLETED 且 aiDetectedTypes 非空（标准 YOLO 处理完成）
+     * 2. annotatedFileUrl 非空（YOLO 已产出标注文件，即使状态尚未同步）
      */
     public List<IncidentAttachment> findAiDetectedAttachments(Long incidentId) {
         List<IncidentAttachment> attachments = attachmentRepository.findByIncidentId(incidentId);
-        return attachments.stream()
-                .filter(a -> "COMPLETED".equals(a.getRecognitionStatus())
+        List<IncidentAttachment> result = attachments.stream()
+                .filter(a -> "PHOTO".equals(a.getAttachmentType())
+                        || "VIDEO".equals(a.getAttachmentType()))
+                .filter(a -> ("COMPLETED".equals(a.getRecognitionStatus())
                         && a.getAiDetectedTypes() != null && !a.getAiDetectedTypes().isBlank())
+                        || (a.getAnnotatedFileUrl() != null && !a.getAnnotatedFileUrl().isBlank()))
                 .collect(Collectors.toList());
+        log.info("事故 {} 共有 {} 个附件，筛选出 {} 个可展示的分析媒体",
+                incidentId, attachments.size(), result.size());
+        return result;
     }
 
     /**

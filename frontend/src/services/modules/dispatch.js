@@ -670,3 +670,41 @@ export async function getIncidentDispatchTasks(
     ),
   }
 }
+
+/**
+ * 获取事故的 AI 分析后附件（YOLO 标注图片/视频），供指挥中心查看。
+ * GET /api/v1/command-center/incidents/{incidentId}/ai-attachments
+ */
+/**
+ * 将 YOLO 输出的绝对 URL（如 http://localhost:8000/runs/api/videos/x.mp4）
+ * 转换为相对路径（/runs/api/videos/x.mp4），统一走 Vite 代理 / Spring Boot 静态资源。
+ */
+function normalizeAnnotatedUrl(url) {
+  if (!url) return ''
+  // 去掉协议 + 主机 + 端口，只保留 /runs/api/... 路径
+  return url.replace(/^https?:\/\/[^/]+/, '')
+}
+
+export async function getIncidentAttachments(incidentId) {
+  const res = await request.get(
+    `/v1/command-center/incidents/${incidentId}/ai-attachments`
+  )
+  return {
+    code: 200,
+    data: (res.data || []).map((att) => ({
+      id: att.id,
+      incidentId: att.incidentId,
+      fileName: att.fileName,
+      originalFilename: att.originalFilename,
+      contentType: att.contentType,
+      attachmentType: att.attachmentType,
+      recognitionStatus: att.recognitionStatus,
+      aiDetectedTypes: att.aiDetectedTypes,
+      /** YOLO 输出标注文件，已转为相对路径走后端代理 */
+      annotatedFileUrl: normalizeAnnotatedUrl(att.annotatedFileUrl),
+      reviewed: att.reviewed,
+      /** 原始文件（通过后端接口加载，作为兜底） */
+      fileUrl: `/api/v1/incidents/${incidentId}/attachments/${att.id}/file`,
+    })),
+  }
+}

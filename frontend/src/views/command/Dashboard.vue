@@ -212,6 +212,14 @@
             <div class="row-meta">
               <span class="status-chip" :class="statusClass(item.status)">{{ item.status || '-' }}</span>
               <time>{{ compactDateTime(item.reportTime) }}</time>
+              <button
+                class="media-view-btn"
+                type="button"
+                :title="`查看 ${item.caseNo || '#' + item.id} YOLO 分析媒体`"
+                @click.stop="openMediaDialog(item)"
+              >
+                <el-icon><VideoCamera /></el-icon>
+              </button>
             </div>
           </article>
           <div v-if="!filteredAccidents.length && !accidentStore.loading" class="empty-state">
@@ -764,6 +772,89 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- YOLO 分析后现场媒体查看弹窗 -->
+    <el-dialog
+      v-model="mediaDialogVisible"
+      class="command-media-dialog"
+      :title="mediaTitle"
+      width="860px"
+      append-to-body
+      destroy-on-close
+      :close-on-click-modal="false"
+    >
+      <div v-loading="mediaLoading" class="media-dialog-body">
+        <template v-if="!mediaLoading && mediaItems.length">
+          <div class="media-grid">
+            <div
+              v-for="(item, index) in mediaItems"
+              :key="item.id"
+              class="media-card"
+            >
+              <!-- YOLO 标注照片 -->
+              <template v-if="item.attachmentType === 'PHOTO'">
+                <el-image
+                  :src="item.annotatedFileUrl || item.fileUrl"
+                  :preview-src-list="mediaItems.filter(i => i.attachmentType === 'PHOTO').map(i => i.annotatedFileUrl || i.fileUrl)"
+                  :initial-index="index"
+                  fit="cover"
+                  class="media-thumb"
+                >
+                  <template #placeholder>
+                    <div class="media-placeholder"><el-icon :size="32"><PictureFilled /></el-icon></div>
+                  </template>
+                  <template #error>
+                    <div class="media-placeholder">
+                      <el-icon :size="32"><PictureFilled /></el-icon>
+                      <span>加载失败</span>
+                    </div>
+                  </template>
+                </el-image>
+                <div class="media-label">
+                  <el-tag size="small" type="success" effect="plain">📷 YOLO 标注照片</el-tag>
+                </div>
+              </template>
+
+              <!-- YOLO 标注视频 -->
+              <template v-else-if="item.attachmentType === 'VIDEO'">
+                <video
+                  controls
+                  preload="metadata"
+                  class="media-video"
+                  @error="(e) => e.target.classList.add('is-error')"
+                >
+                  <source :src="item.annotatedFileUrl || item.fileUrl" :type="item.contentType || 'video/mp4'" />
+                </video>
+                <div class="media-label">
+                  <el-tag size="small" type="warning" effect="plain">🎬 YOLO 标注视频</el-tag>
+                </div>
+              </template>
+
+              <!-- AI 检测标签 -->
+              <div v-if="item.aiDetectedTypes" class="media-ai-tags">
+                <el-tag
+                  v-for="type in item.aiDetectedTypes.split(',').map(t => t.trim()).filter(Boolean)"
+                  :key="type"
+                  size="small"
+                  effect="dark"
+                  round
+                >{{ type }}</el-tag>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-else-if="!mediaLoading" class="media-empty">
+          <el-icon :size="48"><PictureFilled /></el-icon>
+          <p>暂无已完成 AI 分析的媒体文件</p>
+          <span>YOLO 检测完成后的标注图片 / 视频会出现在这里</span>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="mediaDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -777,6 +868,7 @@ import { getAccidentList, getAccidentDetail } from '@/services/modules/accident'
 import {
   dispatchSelectedVehicle,
   getDispatchList,
+  getIncidentAttachments,
   getResponders,
   getVehicleEtas,
 } from '@/services/modules/dispatch'
@@ -793,12 +885,14 @@ import {
   Filter,
   Loading,
   Location,
+  PictureFilled,
   Refresh,
   Search,
   SwitchButton,
   User,
   UserFilled,
   Van,
+  VideoCamera,
 } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -813,6 +907,34 @@ const advancedVisible = ref(false)
 const refreshing = ref(false)
 const taskLoading = ref(false)
 const lastUpdatedTime = ref('')
+
+// ====== 分析后现场媒体弹窗 ======
+const mediaDialogVisible = ref(false)
+const mediaLoading = ref(false)
+const mediaItems = ref([])
+const mediaTitle = ref('')
+
+async function openMediaDialog(incident) {
+  if (!incident?.id) return
+  mediaTitle.value = `${incident.caseNo || '#' + incident.id} YOLO 分析现场媒体`
+  mediaItems.value = []
+  mediaLoading.value = true
+  mediaDialogVisible.value = true
+  try {
+    const res = await getIncidentAttachments(incident.id)
+    mediaItems.value = (res.data || []).filter(
+      (item) => item.attachmentType === 'PHOTO' || item.attachmentType === 'VIDEO'
+    )
+    if (!mediaItems.value.length) {
+      ElMessage.info('该事故暂无已完成 AI 分析的媒体文件')
+    }
+  } catch (error) {
+    ElMessage.error('加载分析媒体失败：' + (error.message || '未知错误'))
+    mediaDialogVisible.value = false
+  } finally {
+    mediaLoading.value = false
+  }
+}
 
 // ====== 顶部时间 ======
 const now = ref(new Date())
@@ -2052,6 +2174,30 @@ onUnmounted(() => {
   time { color: #486e80; font-size: 9px; white-space: nowrap; }
 }
 
+.media-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: #6493a6;
+  cursor: pointer;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 4px;
+  background: rgba(0, 229, 255, 0.05);
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--cyan);
+    border-color: rgba(0, 229, 255, 0.5);
+    background: rgba(0, 229, 255, 0.12);
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.1);
+  }
+
+  .el-icon { font-size: 13px; }
+}
+
 .status-chip,
 .task-status,
 .drawer-status {
@@ -2525,5 +2671,100 @@ onUnmounted(() => {
 
 .is-selected-eta-row > td.el-table__cell {
   background: rgba(64, 158, 255, 0.1) !important;
+}
+
+/* ====== YOLO 分析媒体弹窗 ====== */
+.command-media-dialog.el-dialog {
+  color: #dffaff;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: rgba(3, 15, 31, 0.98);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 25px rgba(0, 229, 255, 0.08);
+
+  .el-dialog__title { color: #eafaff; }
+}
+
+.media-dialog-body { min-height: 200px; }
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.media-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(5, 22, 43, 0.7);
+  transition: border-color 0.2s;
+
+  &:hover { border-color: rgba(0, 229, 255, 0.4); }
+}
+
+.media-thumb {
+  width: 100%;
+  height: 170px;
+  cursor: pointer;
+
+  .el-image__inner { object-fit: cover; }
+}
+
+.media-video {
+  width: 100%;
+  height: 170px;
+  background: #000;
+  outline: none;
+
+  &.is-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &::after {
+      content: '⚠ 视频加载失败';
+      color: #ef4444;
+      font-size: 13px;
+    }
+  }
+}
+
+.media-placeholder {
+  width: 100%;
+  height: 170px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #4f7587;
+  background: rgba(3, 16, 32, 0.6);
+
+  span { font-size: 11px; }
+}
+
+.media-label {
+  padding: 6px 10px 0;
+}
+
+.media-ai-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 10px 10px;
+}
+
+.media-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 0;
+  color: #42697a;
+
+  p { margin: 0; font-size: 13px; }
+  span { font-size: 11px; color: #527486; }
 }
 </style>

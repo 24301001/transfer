@@ -99,20 +99,20 @@
             </el-descriptions>
 
             <!--
-              地图仍然显示事故地点。
+              地图显示事故地点。
 
-              点击地图时：
-              1. 获取清障人员当前位置
-              2. 将当前位置发送给后端
-              3. 使用后端返回的 navigationUrl 打开导航
+              点击地图时不再读取浏览器定位，
+              而是由后端根据当前任务绑定的车辆 ID，
+              查询数据库中的车辆经纬度作为导航起点，
+              再生成“救援车辆位置 → 事故地点”的导航路线。
             -->
             <MapCard
               :height="'200px'"
               :title="task.location?.name"
               :hint="
                 navigationLoading
-                  ? '正在获取当前位置…'
-                  : '点击自动定位并导航'
+                  ? '正在读取调度车辆位置…'
+                  : '点击从调度车辆位置开始导航'
               "
               :markers="mapMarkers"
               :center="mapCenter"
@@ -127,7 +127,7 @@
               </el-icon>
 
               <span>
-                点击地图后将自动获取当前位置，并导航至事故地点。
+                点击地图后，将使用该任务所选救援车辆在数据库中的经纬度作为起点，导航至事故地点。
               </span>
             </div>
 
@@ -436,7 +436,6 @@ import {
 } from '@/services/modules/dispatch'
 
 import {
-  getRealCurrentPosition,
   wgs84ToBd09,
 } from '@/utils/location'
 
@@ -577,15 +576,12 @@ async function fetchDetail() {
 }
 
 /**
- * 自动定位并打开导航。
+ * 使用任务绑定车辆的数据库坐标打开导航。
  *
- * 原来的事故地点和导航逻辑全部保留，
- * 这里只是在请求导航链接之前增加：
- *
- * 1. 获取清障人员当前 GPS 坐标；
- * 2. 将当前位置传给后端；
- * 3. 后端生成当前位置到事故地点的 navigationUrl；
- * 4. 打开导航页面。
+ * 前端不再调用浏览器定位 API，也不再向后端传入
+ * 浏览器当前位置。后端会根据 taskId 找到该任务绑定的
+ * emergencyVehicleId，并使用车辆表/任务快照中的经纬度
+ * 作为起点，事故经纬度作为终点生成 navigationUrl。
  */
 async function handleNavigate() {
   if (navigationLoading.value) {
@@ -601,13 +597,20 @@ async function handleNavigate() {
     return
   }
 
+  if (!task.value?.vehicleId) {
+    ElMessage.warning(
+      '当前任务尚未绑定救援车辆，无法生成导航路线'
+    )
+    return
+  }
+
   navigationLoading.value = true
 
   /*
    * 点击时立即创建新窗口。
    *
-   * 定位和接口请求都是异步操作。如果等待它们完成以后
-   * 再调用 window.open，部分手机浏览器会拦截导航窗口。
+   * 接口请求是异步操作。如果等待请求结束后再调用
+   * window.open，部分手机浏览器会把它当作弹窗拦截。
    */
   const navigationWindow =
     window.open(
@@ -618,28 +621,21 @@ async function handleNavigate() {
   const loadingMessage =
     ElMessage.info({
       message:
-        '正在获取当前位置并生成导航…',
+        '正在读取调度车辆位置并生成导航…',
       duration: 0,
     })
 
   try {
     /*
-     * 项目现有函数。
+     * 这里只传 taskId。
      *
-     * navigator.geolocation 返回的是
-     * WGS84 GPS 坐标，无需转换成 BD09 后再传后端。
+     * 不传 longitude、latitude，也不读取浏览器定位。
+     * 后端根据任务绑定的车辆，从数据库读取车辆坐标，
+     * 生成“车辆位置 → 事故地点”的 navigationUrl。
      */
-    const currentPosition =
-      await getRealCurrentPosition()
-
     const res =
       await getClearanceRescueDetail(
-        taskId,
-        {
-          lng: currentPosition.lng,
-          lat: currentPosition.lat,
-          coordinateType: 'WGS84',
-        }
+        taskId
       )
 
     const navigationUrl =
@@ -647,7 +643,7 @@ async function handleNavigate() {
 
     if (!navigationUrl) {
       throw new Error(
-        '后端未返回导航链接'
+        '无法生成导航路线，请确认已选择车辆，且车辆数据库经纬度完整'
       )
     }
 
@@ -673,13 +669,13 @@ async function handleNavigate() {
     }
 
     console.error(
-      '[TaskDetail] 自动定位导航失败：',
+      '[TaskDetail] 车辆位置导航失败：',
       error
     )
 
     ElMessage.error(
       error?.message ||
-      '自动定位导航失败，请检查定位权限'
+      '车辆位置导航失败，请检查车辆经纬度数据'
     )
   } finally {
     loadingMessage.close()
