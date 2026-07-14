@@ -1,0 +1,45 @@
+放置位置
+========
+
+请把 Dockerfile 和 .dockerignore 放到：
+
+C:\Users\22825\Desktop\transfer\backend\
+
+该目录中应同时存在：
+- pom.xml
+- src\
+- Dockerfile
+- .dockerignore
+- docker-compose.app.yml
+
+PowerShell 验证
+===============
+
+cd C:\Users\22825\Desktop\transfer\backend
+Get-ChildItem -Force Dockerfile*
+Get-ChildItem pom.xml
+Get-ChildItem src
+
+重新构建
+========
+
+docker-compose `
+  -f docker-compose.app.yml `
+  -f docker-compose.mysql.yml `
+  -f docker-compose.redis.yml `
+  build --no-cache backend
+
+docker-compose `
+  -f docker-compose.app.yml `
+  -f docker-compose.mysql.yml `
+  -f docker-compose.redis.yml `
+  up -d
+
+验证 FFmpeg
+===========
+
+docker exec -it backend ffmpeg -version
+
+如果实际容器名不是 backend：
+
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
