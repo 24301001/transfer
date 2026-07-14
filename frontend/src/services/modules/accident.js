@@ -1,6 +1,6 @@
 import request from '../request'
 
-const UPLOAD_DETECTION_TIMEOUT = 45 * 1000
+const UPLOAD_DETECTION_TIMEOUT = 5 * 60 * 1000 // 5 分钟，匹配后端 YOLO + 预测总耗时
 
 // ====== 枚举映射 ======
 
@@ -403,6 +403,7 @@ function transformPublicReportResponse(data) {
       message: data.predictionSubmit.message || '',
       dataModuleTraceId: data.predictionSubmit.dataModuleTraceId || '',
     } : null,
+    trackingToken: data.trackingToken || '',
   }
 }
 
@@ -495,6 +496,41 @@ export async function publicReportWithAttachments(data) {
   return {
     code: 200,
     data: transformPublicReportResponse(res.data),
+  }
+}
+
+/**
+ * 市民匿名查询预测状态
+ * GET /api/v1/incidents/public/{incidentId}/prediction-status
+ * @param {number} incidentId
+ * @param {string} trackingToken
+ */
+export async function getPredictionStatus(incidentId, trackingToken) {
+  const res = await request.get(`/v1/incidents/public/${incidentId}/prediction-status`, {
+    headers: { 'X-Tracking-Token': trackingToken },
+  })
+  return {
+    code: 200,
+    data: {
+      status: res.data.status,
+      completed: res.data.completed,
+      message: res.data.message,
+      result: res.data.result
+        ? {
+            accidentType: res.data.result.accidentType || '',
+            riskLevel: RISK_LEVEL_MAP[res.data.result.riskLevel] || res.data.result.riskLevel,
+            riskScore: res.data.result.riskScore,
+            congestionDurationMinutes: res.data.result.congestionDurationMinutes,
+            recoveryDurationMinutes: res.data.result.recoveryDurationMinutes,
+            confidence: res.data.result.confidence,
+            modelVersion: res.data.result.modelVersion,
+            suggestions: res.data.result.suggestions,
+            explanation: res.data.result.explanation,
+            riskFactors: res.data.result.riskFactors,
+            evidenceSummary: res.data.result.evidenceSummary,
+          }
+        : null,
+    },
   }
 }
 
