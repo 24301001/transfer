@@ -7,6 +7,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -52,6 +55,9 @@ public class CommandCenterService {
             LoggerFactory.getLogger(
                     CommandCenterService.class
             );
+
+    private static final ObjectMapper YOLO_JSON_MAPPER =
+            new ObjectMapper();
 
     private static final List<TaskStatus>
             ACTIVE_TASK_STATUSES = List.of(
@@ -402,9 +408,9 @@ public class CommandCenterService {
         List<UserRole> roles =
                 role == null
                         ? List.of(
-                                UserRole.FIELD_OFFICER,
-                                UserRole.RESCUE_WORKER
-                        )
+                        UserRole.FIELD_OFFICER,
+                        UserRole.RESCUE_WORKER
+                )
                         : List.of(role);
 
         return userAccountRepository
@@ -690,22 +696,217 @@ public class CommandCenterService {
 
     /**
      * 获取事故的 AI 检测附件列表（供指挥中心查看带检测框的图片/视频）。
-     * 返回满足以下条件之一的附件（确保前端有数据可看）：
-     * 1. recognitionStatus = COMPLETED 且 aiDetectedTypes 非空（标准 YOLO 处理完成）
-     * 2. annotatedFileUrl 非空（YOLO 已产出标注文件，即使状态尚未同步）
+     *
+     * 兼容几种实际情况：
+     * 1. annotatedFileUrl 已经直接保存到数据库；
+     * 2. 数据库还没有单独保存 annotatedFileUrl，但 aiDetectionJson 里有
+     *    output_video_url / output_image_url；
+     * 3. YOLO 未产出标注文件时，也返回原始图片/视频附件，让前端可以显示兜底提示，
+     *    避免弹窗完全空白。
      */
+    @Transactional
     public List<IncidentAttachment> findAiDetectedAttachments(Long incidentId) {
-        List<IncidentAttachment> attachments = attachmentRepository.findByIncidentId(incidentId);
-        List<IncidentAttachment> result = attachments.stream()
-                .filter(a -> "PHOTO".equals(a.getAttachmentType())
-                        || "VIDEO".equals(a.getAttachmentType()))
-                .filter(a -> ("COMPLETED".equals(a.getRecognitionStatus())
-                        && a.getAiDetectedTypes() != null && !a.getAiDetectedTypes().isBlank())
-                        || (a.getAnnotatedFileUrl() != null && !a.getAnnotatedFileUrl().isBlank()))
-                .collect(Collectors.toList());
-        log.info("事故 {} 共有 {} 个附件，筛选出 {} 个可展示的分析媒体",
-                incidentId, attachments.size(), result.size());
-        return result;
+        List<IncidentAttachment> attachments =
+                attachmentRepository.findByIncidentId(incidentId);
+
+        List<IncidentAttachment> visualAttachments =
+                attachments.stream()
+                        .filter(this::isVisualAttachment)
+                        .collect(Collectors.toList());
+
+        List<IncidentAttachment> backfilled =
+                new ArrayList<>();
+
+        int yoloOutputCount = 0;
+
+        for (IncidentAttachment attachment : visualAttachments) {
+            String annotatedUrl =
+                    resolveAnnotatedFileUrl(attachment);
+
+            if (hasText(annotatedUrl)) {
+                yoloOutputCount++;
+            }
+
+            if (!hasText(attachment.getAnnotatedFileUrl())
+                    && hasText(annotatedUrl)) {
+                attachment.setAnnotatedFileUrl(annotatedUrl);
+                backfilled.add(attachment);
+            }
+        }
+
+        if (!backfilled.isEmpty()) {
+            attachmentRepository.saveAll(backfilled);
+            log.info(
+                    "事故 {} 从 aiDetectionJson 回填 {} 个 YOLO 标注媒体地址",
+                    incidentId,
+                    backfilled.size()
+            );
+        }
+
+        log.info(
+                "事故 {} 共有 {} 个附件，返回 {} 个图片/视频附件，其中 {} 个有 YOLO 标注输出",
+                incidentId,
+                attachments.size(),
+                visualAttachments.size(),
+                yoloOutputCount
+        );
+
+        return visualAttachments;
+    }
+
+    private boolean isVisualAttachment(IncidentAttachment attachment) {
+        if (attachment == null) {
+            return false;
+        }
+
+        String type = attachment.getAttachmentType();
+        return "PHOTO".equalsIgnoreCase(type)
+                || "VIDEO".equalsIgnoreCase(type);
+    }
+
+    private String resolveAnnotatedFileUrl(
+            IncidentAttachment attachment
+    ) {
+        if (attachment == null) {
+            return null;
+        }
+
+        String directUrl =
+                normalizeYoloOutputUrl(attachment.getAnnotatedFileUrl());
+
+        if (hasText(directUrl)) {
+            return directUrl;
+        }
+
+        return normalizeYoloOutputUrl(
+                extractYoloOutputUrlFromJson(
+                        attachment.getAiDetectionJson(),
+                        attachment.getAttachmentType()
+                )
+        );
+    }
+
+    private String extractYoloOutputUrlFromJson(
+            String json,
+            String attachmentType
+    ) {
+        if (!hasText(json)) {
+            return null;
+        }
+
+        try {
+            JsonNode root = YOLO_JSON_MAPPER.readTree(json);
+
+            List<String> preferredKeys =
+                    "VIDEO".equalsIgnoreCase(attachmentType)
+                            ? List.of(
+                            "output_video_url",
+                            "outputVideoUrl",
+                            "video_url",
+                            "videoUrl",
+                            "url"
+                    )
+                            : List.of(
+                            "output_image_url",
+                            "outputImageUrl",
+                            "image_url",
+                            "imageUrl",
+                            "url"
+                    );
+
+            String preferred =
+                    findFirstTextValue(root, preferredKeys);
+
+            if (hasText(preferred)) {
+                return preferred;
+            }
+
+            return findFirstTextValue(
+                    root,
+                    List.of(
+                            "output_video_url",
+                            "outputVideoUrl",
+                            "output_image_url",
+                            "outputImageUrl",
+                            "annotatedFileUrl",
+                            "annotated_file_url",
+                            "result_url",
+                            "resultUrl"
+                    )
+            );
+        } catch (Exception ex) {
+            log.warn(
+                    "解析 YOLO 检测 JSON 失败: {}",
+                    ex.getMessage()
+            );
+            return null;
+        }
+    }
+
+    private String findFirstTextValue(
+            JsonNode node,
+            List<String> keys
+    ) {
+        if (node == null || keys == null || keys.isEmpty()) {
+            return null;
+        }
+
+        if (node.isObject()) {
+            for (String key : keys) {
+                JsonNode value = node.get(key);
+                if (value != null && value.isTextual()
+                        && hasText(value.asText())) {
+                    return value.asText();
+                }
+            }
+
+            var fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry =
+                        fields.next();
+                String nested =
+                        findFirstTextValue(entry.getValue(), keys);
+                if (hasText(nested)) {
+                    return nested;
+                }
+            }
+        }
+
+        if (node.isArray()) {
+            for (JsonNode child : node) {
+                String nested =
+                        findFirstTextValue(child, keys);
+                if (hasText(nested)) {
+                    return nested;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private String normalizeYoloOutputUrl(String url) {
+        if (!hasText(url)) {
+            return null;
+        }
+
+        String normalized =
+                url.trim().replace("\", "/");
+
+        int runsIndex = normalized.indexOf("/runs/api/");
+        if (runsIndex >= 0) {
+            return normalized.substring(runsIndex);
+        }
+
+        if (normalized.startsWith("runs/api/")) {
+            return "/" + normalized;
+        }
+
+        return normalized;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**
